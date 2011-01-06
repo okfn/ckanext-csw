@@ -4,6 +4,10 @@ for convenience.
 """
 
 class OwsService(object):
+    def __init__(self, endpoint=None):
+        if endpoint is not None:
+            self._ows(endpoint)
+            
     def __call__(self, args):
         return getattr(self, args.operation)(**self._xmd(args))
     
@@ -29,10 +33,12 @@ class OwsService(object):
                 md[attr] = self._xmd(val)
         return md
         
-    def _ows(self, endpoint, **kw):
+    def _ows(self, endpoint=None, **kw):
         if not hasattr(self, "_Implementation"):
             raise NotImplementedError("Needs an Implementation")
         if not hasattr(self, "__ows_obj__"):
+            if endpoint is None:
+                raise ValueError("Must specify a service endpoint")
             self.__ows_obj__ = self._Implementation(endpoint)
         return self.__ows_obj__
     
@@ -65,10 +71,12 @@ class CswService(OwsService):
         csw.getrecords(**kwa)
         return [self._xmd(r) for r in csw.records.values()]
 
-    def getrecordbyid(self, ids=[], esn="full", **kw):
+    def getrecordbyid(self, ids=[], esn="full", outputschema="gmd", **kw):
+        from owslib.csw import namespaces
         csw = self._ows(**kw)
         kwa = {
             "esn": esn,
+            "outputschema": namespaces[outputschema],
             }
         csw.getrecordbyid(ids, **kwa)
         return [self._xmd(r) for r in csw.records.values()]
