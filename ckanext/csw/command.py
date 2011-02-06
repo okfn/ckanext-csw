@@ -1,15 +1,15 @@
 import argparse
 from pprint import pprint
-from ckanext.ows.services import CswService, WmsService
+from ckanext.csw.services import CswService
 
 #remote = "http://www.nationaalgeoregister.nl/geonetwork/srv/eng/csw"
 #remote = "http://locationmetadataeditor.data.gov.uk/geonetwork/srv/csw"
 
-def owsinfo():
+def cswinfo():
     """
     Hello World
     """
-    parser = argparse.ArgumentParser(description=owsinfo.__doc__)
+    parser = argparse.ArgumentParser(description=cswinfo.__doc__)
 
     parser.add_argument("-d", "--debug", dest="debug", action="store_true")
     
@@ -28,11 +28,6 @@ def owsinfo():
     csw_p.add_argument("-c", "--count", default=10, type=int)
     csw_p.set_defaults(service=CswService)
     
-    wms_p = sub.add_parser("wms", description=WmsService.__doc__)
-    wms_p.add_argument("operation", action="store", choices=WmsService._operations())
-    wms_p.add_argument("endpoint", action="store")
-    wms_p.set_defaults(service=WmsService)
-
     args = parser.parse_args()
     service = args.service()
     value = service(args)
