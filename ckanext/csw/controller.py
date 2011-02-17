@@ -13,17 +13,37 @@ def ntag(nselem):
 
 class CatalogueServiceWebController(BaseController):
     def dispatch(self):
-        try:
-            req = etree.parse(StringIO(request.body))
-        except:
-            err = self.exception(exceptionCode="MissingParameterValue", locator="request")
-            return self.render_xml(err)
+        if request.method == "GET":
+            if "request" not in request.GET:
+                err = self.exception(exceptionCode="MissingParameterValue", location="request")
+                return self.render_xml(err)
+            if request.GET["request"] != "GetCapabilities":
+                err = self.exception(exceptionCode="OperationNotSupported",
+                            location=request.GET["request"])
+                return self.render_xml(err)
+            if "service" not in request.GET:
+                err = self.exception(exceptionCode="MissingParameterValue", location="service")
+                return self.render_xml(err)
+            if request.GET["service"] != "CSW":
+                err = self.exception(exceptionCode="InvalidParameterValue",
+                            location=request.GET["service"])
+                return self.render_xml(err)
+            return self.get_capabilities()
+
+        req = etree.parse(StringIO(request.body))
         
         print etree.tostring(req, pretty_print=True)
         root = req.getroot()
         if root.tag == "{http://www.opengis.net/cat/csw/2.0.2}GetCapabilities":
-            return self.get_capabilities(root)
-        return "Hello World"
+            return self.get_capabilities()
+        if root.tag == "{http://www.opengis.net/cat/csw/2.0.2}GetRecordById":
+            return self.get_record_by_id(root)
+        if root.tag == "{http://www.opengis.net/cat/csw/2.0.2}GetRecords":
+            return self.get_records(root)
+
+        ### TODO: what is the proper exceptionCode??
+        err = self.execption(exceptionCode="UnsupportedRequest")
+        return self.render_xml(err)
 
     def render_xml(self, root):
         tree = etree.ElementTree(root)
@@ -44,15 +64,15 @@ class CatalogueServiceWebController(BaseController):
         etree.SubElement(root, ntag("ows:Exception"), **kw)
         return root
 
-    def get_capabilities(self, req):
+    def get_capabilities(self):
         site = request.host_url + request.path        
         caps = etree.Element(ntag("csw:Capabilities"), nsmap=namespaces)
         srvid = etree.SubElement(caps, ntag("ows:ServiceIdentification"))
-        title = etree.SubElement(caps, ntag("ows:Title"))
+        title = etree.SubElement(srvid, ntag("ows:Title"))
         title.text = unicode(config["cswservice.title"])
-        abstract = etree.SubElement(caps, ntag("ows:Abstract"))
+        abstract = etree.SubElement(srvid, ntag("ows:Abstract"))
         abstract.text = unicode(config["cswservice.abstract"])
-        keywords = etree.SubElement(caps, ntag("ows:Keywords"))
+        keywords = etree.SubElement(srvid, ntag("ows:Keywords"))
         for word in [w.strip() for w in config["cswservice.keywords"].split(",")]:
             if word == "": continue
             kw = etree.SubElement(keywords, ntag("ows:Keyword"))
@@ -115,6 +135,48 @@ class CatalogueServiceWebController(BaseController):
         val = etree.SubElement(pe, ntag("ows:Value"))
         val.text = "XML"
 
+        op = etree.SubElement(opmeta, ntag("ows:Operation"), name="GetRecords")
+        dcp = etree.SubElement(op, ntag("ows:DCP"))
+        http = etree.SubElement(dcp, ntag("ows:HTTP"))
+        attrs = { ntag("xlink:href"): site }
+        etree.SubElement(http, ntag("ows:Post"), **attrs)
+        pe = etree.SubElement(op, ntag("ows:Constraint"), name="PostEncoding")
+        val = etree.SubElement(pe, ntag("ows:Value"))
+        val.text = "XML"
+        param = etree.SubElement(op, ntag("ows:Parameter"), name="resultType")
+        val = etree.SubElement(param, ntag("ows:Value"))
+        val.text = "results"
+        param = etree.SubElement(op, ntag("ows:Parameter"), name="outputFormat")
+        val = etree.SubElement(param, ntag("ows:Value"))
+        val.text = "application/xml"
+        param = etree.SubElement(op, ntag("ows:Parameter"), name="outputSchema")
+        val = etree.SubElement(param, ntag("ows:Value"))
+        val.text = "http://www.isotc211.org/2005/gmd"
+        param = etree.SubElement(op, ntag("ows:Parameter"), name="typeNames")
+        val = etree.SubElement(param, ntag("ows:Value"))
+        val.text = "gmd:MD_Metadata"
+
+        op = etree.SubElement(opmeta, ntag("ows:Operation"), name="GetRecordById")
+        dcp = etree.SubElement(op, ntag("ows:DCP"))
+        http = etree.SubElement(dcp, ntag("ows:HTTP"))
+        attrs = { ntag("xlink:href"): site }
+        etree.SubElement(http, ntag("ows:Post"), **attrs)
+        pe = etree.SubElement(op, ntag("ows:Constraint"), name="PostEncoding")
+        val = etree.SubElement(pe, ntag("ows:Value"))
+        val.text = "XML"
+        param = etree.SubElement(op, ntag("ows:Parameter"), name="resultType")
+        val = etree.SubElement(param, ntag("ows:Value"))
+        val.text = "results"
+        param = etree.SubElement(op, ntag("ows:Parameter"), name="outputFormat")
+        val = etree.SubElement(param, ntag("ows:Value"))
+        val.text = "application/xml"
+        param = etree.SubElement(op, ntag("ows:Parameter"), name="outputSchema")
+        val = etree.SubElement(param, ntag("ows:Value"))
+        val.text = "http://www.isotc211.org/2005/gmd"
+        param = etree.SubElement(op, ntag("ows:Parameter"), name="typeNames")
+        val = etree.SubElement(param, ntag("ows:Value"))
+        val.text = "gmd:MD_Metadata"
+
         filcap = etree.SubElement(caps, ntag("ogc:Filter_Capabilities"))
         spacap = etree.SubElement(filcap, ntag("ogc:Spatial_Capabilities"))
         geomop = etree.SubElement(spacap, ntag("ogc:GeometryOperands"))
@@ -126,7 +188,15 @@ class CatalogueServiceWebController(BaseController):
 
         idcap = etree.SubElement(filcap, ntag("ogc:Id_Capabilities"))
         eid = etree.SubElement(idcap, ntag("ogc:EID"))
-        fid = etree.SubElement(idcap, ntag("ogc:EID"))
+        fid = etree.SubElement(idcap, ntag("ogc:FID"))
         
         return self.render_xml(caps)
+        
+    def get_records(self, root):
+        err = self.exception(exceptionCode="help")
+        return self.render_xml(err)
+
+    def get_record_by_id(self, root):
+        err = self.exception(exceptionCode="help")
+        return self.render_xml(err)
         
