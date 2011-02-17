@@ -23,6 +23,10 @@ setup(
     entry_points="""
     [console_scripts]
     cswinfo = ckanext.csw.command:cswinfo
+
+    [ckan.plugins]
+    # Add plugins here, eg
+    cswserver=ckanext.csw.plugin:CatalogueServiceWeb
     """,
     test_suite = 'nose.collector',
 )
