@@ -23,6 +23,8 @@ class CatalogueServiceWeb(SingletonPlugin):
         config.setdefault("cswservice.contact_hours", "")
         config.setdefault("cswservice.contact_instructions", "")
         config.setdefault("cswservice.contact_role", "")
+
+        config["cswservice.rndlog_threshold"] = float(config.get("cswservice.rndlog_threshold", "0.01"))
         
     def before_map(self, route_map):
         c = "ckanext.csw.controller:CatalogueServiceWebController"
