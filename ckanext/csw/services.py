@@ -106,13 +106,16 @@ class CswService(OwsService):
             "esn": esn,
             "outputschema": namespaces[outputschema],
             }
+        # Ordinary Python version's don't support the metadata argument
         csw.getrecordbyid(ids, **kwa)
         if not csw.records:
             return
         record = self._xmd(csw.records.values()[0])
 
         ## strip off the enclosing results container, we only want the metadata
-        md = csw._exml.find("/gmd:MD_Metadata", namespaces=namespaces)
+        #md = csw._exml.find("/gmd:MD_Metadata")#, namespaces=namespaces)
+        # Ordinary Python version's don't support the metadata argument
+        md = csw._exml.find("/{http://www.isotc211.org/2005/gmd}MD_Metadata")
         mdtree = etree.ElementTree(md)
         try:
             record["xml"] = etree.tostring(mdtree, pretty_print=True, xml_declaration=True)
