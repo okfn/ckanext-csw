@@ -1,18 +1,46 @@
 try: from cStringIO import StringIO
 except ImportError: from StringIO import StringIO
+import traceback
+from datetime import datetime
 from pylons import request, response, config
 from lxml import etree
 from owslib.csw import namespaces
+from sqlalchemy import select
 from ckan.lib.base import BaseController
+from ckan.model.meta import Session
+from ckan.model.harvesting import HarvestedDocument
 
 namespaces["xlink"] = "http://www.w3.org/1999/xlink"
 
+log = __import__("logging").getLogger(__name__)
+
+from random import random
+class __rlog__(object):
+    """
+    Random log -- log wrapper to log a defined percentage
+    of dialogues
+    """
+    def __init__(self, threshold=config["cswservice.rndlog_threshold"]):
+        self.threshold = threshold
+        self.i = random()
+    def __getattr__(self, attr):
+        if self.i > self.threshold:
+            return self.dummy
+        return getattr(log, attr)
+    def dummy(self, *av, **kw):
+        pass
+       
 def ntag(nselem):
     pfx, elem = nselem.split(":")
     return "{%s}%s" % (namespaces[pfx], elem)
 
 class CatalogueServiceWebController(BaseController):
+
     def dispatch(self):
+        self.rlog = __rlog__()
+        self.rlog.info("request environ\n%s", request.environ)
+        self.rlog.info("request headers\n%s", request.headers)
+        self.rlog.info("request body\n%s", request.body)
         if request.method == "GET":
             if "request" not in request.GET:
                 err = self.exception(exceptionCode="MissingParameterValue", location="request")
@@ -31,8 +59,6 @@ class CatalogueServiceWebController(BaseController):
             return self.get_capabilities()
 
         req = etree.parse(StringIO(request.body))
-        
-        print etree.tostring(req, pretty_print=True)
         root = req.getroot()
         if root.tag == "{http://www.opengis.net/cat/csw/2.0.2}GetCapabilities":
             return self.get_capabilities()
@@ -51,7 +77,8 @@ class CatalogueServiceWebController(BaseController):
         response.headers["Content-Length"] = len(data)
         response.content_type = "application/xml"
         response.charset="UTF-8"
-        print data
+        self.rlog.info("response headers:\n%s", response.headers)
+        self.rlog.info("response.body:\n%s", data)
         return data
 
     def exception(self, **kw):
@@ -192,11 +219,118 @@ class CatalogueServiceWebController(BaseController):
         
         return self.render_xml(caps)
         
+    def _parse_request_common(self, root):
+        """
+        Check common parts of the request for GetRecords, GetRecordById, etc.
+        Return a dictionary of parameters or else an XML error message (string)
+        """
+        service = root.get("service")
+        if service is None:
+            err = self.exception(exceptionCode="MissingParameterValue", location="service")
+            return self.render_xml(err)
+        elif service != "CSW":
+            err = self.exception(exceptionCode="InvalidParameterValue", location="service")
+            return self.render_xml(err)
+        outputSchema = root.get("outputSchema", namespaces["gmd"])
+        if outputSchema != namespaces["gmd"]:
+            err = self.exception(exceptionCode="InvalidParameterValue", location="outputSchema")
+            return self.render_xml(err)
+        resultType = root.get("resultType", "results")
+        if resultType != "results":
+            err = self.exception(exceptionCode="InvalidParameterValue", location="resultType")
+            return self.render_xml(err)
+        outputFormat = root.get("outputFormat", "application/xml")
+        if outputFormat != "application/xml":
+            err = self.exception(exceptionCode="InvalidParameterValue", location="outputFormat")
+            return self.render_xml(err)
+        elementSetName = root.get("elementSetName", "full")
+        if elementSetName not in ("full", "brief"):
+            err = self.exception(exceptionCode="InvalidParameterValue", location="elementSetName")
+            return self.render_xml(err)
+
+        params = {
+            "outputSchema": outputSchema,
+            "resultType": resultType,
+            "outputFormat": outputFormat,
+            "elementSetName": elementSetName
+            }
+        return params
+    
     def get_records(self, root):
-        err = self.exception(exceptionCode="help")
-        return self.render_xml(err)
+        req = self._parse_request_common(root)
+        if not isinstance(req, dict):
+            return req
+        
+        startPosition = root.get("startPosition", "0")
+        try:
+            startPosition = int(startPosition)
+        except:
+            err = self.exception(exceptionCode="InvalidParameterValue", location="startPosition")
+            return self.render_xml(err)
+        maxRecords = root.get("maxRecords", "0")
+        try:
+            maxRecords = int(maxRecords)
+        except:
+            err = self.exception(exceptionCode="InvalidParameterValue", location="maxRecords")
+            return self.render_xml(err)
+
+        resp = etree.Element(ntag("csw:GetRecordsResponse"), nsmap=namespaces)
+        etree.SubElement(resp, ntag("csw:SearchStatus"), timestamp=datetime.utcnow().isoformat())
+
+        cursor = Session.connection()
+        
+        #q = Session.query(HarvestedDocument).order_by(HarvestedDocument.created.desc())
+        q  = select([HarvestedDocument.guid]
+                    ).order_by(HarvestedDocument.created.desc()
+                               )
+        ### TODO Parse query instead of stupidly just returning whatever we like
+        rset = q.offset(startPosition).limit(maxRecords)
+
+        total = Session.execute(q.alias().count()).first()[0]
+        returned = Session.execute(rset.alias().count()).first()[0]
+        attrs = {
+            "numberOfRecordsMatched": total,
+            "numberOfRecordsReturned": returned,
+            "elementSet": "full"
+            }
+        if attrs["numberOfRecordsMatched"] > attrs["numberOfRecordsReturned"]:
+            attrs["nextRecord"]  = attrs["numberOfRecordsReturned"] + 1
+        attrs = dict((k, unicode(v)) for k,v in attrs.items())
+        results = etree.SubElement(resp, ntag("csw:SearchResults"), **attrs)
+                                                          
+        for guid, in Session.execute(rset):
+            doc = Session.query(HarvestedDocument
+                                ).filter(HarvestedDocument.guid==guid
+                                         ).order_by(HarvestedDocument.created.desc()
+                                                    ).limit(1).first()
+            try:
+                record = etree.parse(StringIO(doc.content.encode("utf-8")))
+                results.append(record.getroot())
+            except:
+                log.error("exception parsing document %s:\n%s", doc.id, traceback.format_exc())
+                raise
+            
+        return self.render_xml(resp)
 
     def get_record_by_id(self, root):
-        err = self.exception(exceptionCode="help")
-        return self.render_xml(err)
-        
+        req = self._parse_request_common(root)
+        if not isinstance(req, dict):
+            return req
+
+        resp = etree.Element(ntag("csw:GetRecordByIdResponse"), nsmap=namespaces)
+        seen = set()
+        for ident in root.findall(ntag("csw:Id")):
+            doc = Session.query(HarvestedDocument
+                                ).filter(HarvestedDocument.guid==ident.text,
+                                         ).order_by(HarvestedDocument.created.desc()
+                                                    ).limit(1).first()
+            if doc is None:
+                continue
+            try:
+                record = etree.parse(StringIO(doc.content.encode("utf-8")))
+                resp.append(record.getroot())
+            except:
+                log.error("exception parsing document %s:\n%s", doc.id, traceback.format_exc())
+                raise
+
+        return self.render_xml(resp)
