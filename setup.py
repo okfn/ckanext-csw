@@ -3,7 +3,7 @@ import sys
 
 requirements = [
     "owslib",
-    "lxml",
+    "lxml<=2.2.99",
 ]
 if not sys.version.startswith("2.7") and not sys.version.startswith("3"):
     requirements.append("argparse")

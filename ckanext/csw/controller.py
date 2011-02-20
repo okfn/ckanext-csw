@@ -40,7 +40,6 @@ class CatalogueServiceWebController(BaseController):
         self.rlog = __rlog__()
         self.rlog.info("request environ\n%s", request.environ)
         self.rlog.info("request headers\n%s", request.headers)
-        self.rlog.info("request body\n%s", request.body)
         if request.method == "GET":
             if "request" not in request.GET:
                 err = self.exception(exceptionCode="MissingParameterValue", location="request")
@@ -58,7 +57,15 @@ class CatalogueServiceWebController(BaseController):
                 return self.render_xml(err)
             return self.get_capabilities()
 
-        req = etree.parse(StringIO(request.body))
+        try:
+            req = etree.parse(StringIO(request.body))
+            self.rlog.info(u"request body\n%s", etree.tostring(req, pretty_print=True))
+        except:
+            self.rlog.info("request body\n%s", request.body)
+            self.rlog.error("exception parsing body\n%s", traceback.format_exc())
+            err = self.exception(exceptionCode="MissingParameterValue", locator="request")
+            return self.render_xml(err)
+        
         root = req.getroot()
         if root.tag == "{http://www.opengis.net/cat/csw/2.0.2}GetCapabilities":
             return self.get_capabilities()
@@ -334,3 +341,17 @@ class CatalogueServiceWebController(BaseController):
                 raise
 
         return self.render_xml(resp)
+
+### <ns0:GetRecords xmlns:ns0="http://www.opengis.net/cat/csw/2.0.2" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" outputSchema="http://www.isotc211.org/2005/gmd" outputFormat="application/xml" version="2.0.2" resultType="results" service="CSW" startPosition="1" maxRecords="5" xsi:schemaLocation="http://www.opengis.net/cat/csw/2.0.2 http://schemas.opengis.net/csw/2.0.2/CSW-discovery.xsd">
+###     <ns0:Query typeNames="csw:Record">
+###         <ns0:ElementSetName>full</ns0:ElementSetName>
+###         <ns0:Constraint version="1.1.0">
+###             <ns0:Filter xmlns:ns0="http://www.opengis.net/ogc">
+###                 <ns0:PropertyIsEqualTo>
+###                     <ns0:PropertyName>dc:type</ns0:PropertyName>
+###                     <ns0:Literal>dataset</ns0:Literal>
+###                 </ns0:PropertyIsEqualTo>
+###             </ns0:Filter>
+###         </ns0:Constraint>
+###     </ns0:Query>
+### </ns0:GetRecords>

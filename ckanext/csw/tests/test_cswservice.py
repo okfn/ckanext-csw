@@ -2,16 +2,27 @@
 ### paster serve running on port 5000 with the cswservice
 ### plugin enabled...
 import unittest
+import urllib
 from urllib2 import urlopen
 from owslib.csw import CatalogueServiceWeb
 from owslib.iso import MD_Metadata
 
-#service = "http://ec2-46-51-149-132.eu-west-1.compute.amazonaws.com:8080/geonetwork/srv/csw"
-service = "http://localhost:5000/csw"
+service = "http://ec2-46-51-149-132.eu-west-1.compute.amazonaws.com:8080/geonetwork/srv/csw"
+service = "http://ogcdev.bgs.ac.uk/geonetwork/srv/en/csw"
+#service = "http://localhost:5000/csw"
 
 GMD = "http://www.isotc211.org/2005/gmd"
 
-class GetCapabilitiesGET(unittest.TestCase):
+class TestInvalidPost(unittest.TestCase):
+    def test_invalid(self):
+        params = urllib.urlencode({'spam': 1, 'eggs': 2, 'bacon': 0})
+        f = urlopen(service, params)
+        response = f.read()
+        f.close()
+        assert "MissingParameterValue" in response, response
+        assert 'locator="request"' in response, response
+
+class TestGetCapabilities(unittest.TestCase):
     def test_good(self):
         fp = urlopen(service + "?request=GetCapabilities&service=CSW")
         caps = fp.read()
@@ -59,7 +70,12 @@ class Get_01_Records(unittest.TestCase):
         for ident in csw.records:
             identifiers.append(ident)
             assert isinstance(csw.records[ident], MD_Metadata), (ident, csw.records[ident])
-            
+
+    def test_GetRecords_dataset(self):
+        csw = CatalogueServiceWeb(service)
+        csw.getrecords(qtype="dataset", outputschema=GMD, startposition=1, maxrecords=5)
+        nrecords = len(csw.records)
+        
 class Get_02_RecordById(unittest.TestCase):
     def test_GetRecordById(self):
         csw = CatalogueServiceWeb(service)
