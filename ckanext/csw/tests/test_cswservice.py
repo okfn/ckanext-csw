@@ -11,6 +11,7 @@ from owslib.iso import MD_Metadata
 service = "http://ogcdev.bgs.ac.uk/geonetwork/srv/en/csw"
 service = "http://ec2-46-51-149-132.eu-west-1.compute.amazonaws.com:8080/geonetwork/srv/csw"
 service = "http://localhost:5000/csw"
+#service = "http://localhost:8080/geonetwork/srv/csw"
 
 GMD = "http://www.isotc211.org/2005/gmd"
 
@@ -52,7 +53,6 @@ class TestGetCapabilities(unittest.TestCase):
         assert "GetCapabilities" in caps
         assert "GetRecords" in caps
         assert "GetRecordById" in caps
-
         
     def test_good_post(self):
         csw = CatalogueServiceWeb(service)
@@ -79,6 +79,18 @@ class Get_01_Records(unittest.TestCase):
     def test_GetRecords_dataset(self):
         csw = CatalogueServiceWeb(service)
         csw.getrecords(qtype="dataset", outputschema=GMD, startposition=1, maxrecords=5)
+        nrecords = len(csw.records)
+
+    def test_GetRecords_brief(self):
+        csw = CatalogueServiceWeb(service)
+        csw.getrecords(outputschema=GMD, startposition=1, maxrecords=5, esn="brief")
+        print csw.response
+        nrecords = len(csw.records)
+
+    def test_GetRecords_summary(self):
+        csw = CatalogueServiceWeb(service)
+        csw.getrecords(outputschema=GMD, startposition=1, maxrecords=5, esn="summary")
+        print csw.response
         nrecords = len(csw.records)
         
 class Get_02_RecordById(unittest.TestCase):

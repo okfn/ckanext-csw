@@ -36,49 +36,61 @@ def ntag(nselem):
 
 class CatalogueServiceWebController(BaseController):
 
-    def dispatch(self):
+    def _operations(self):
+        return dict((x, getattr(self, x)) for x in dir(self) if not x.startswith("_"))
+    
+    def dispatch_get(self):
         self.rlog = __rlog__()
         self.rlog.info("request environ\n%s", request.environ)
         self.rlog.info("request headers\n%s", request.headers)
-        if request.method == "GET":
-            if "request" not in request.GET:
-                err = self.exception(exceptionCode="MissingParameterValue", locator="request")
-                return self.render_xml(err)
-            if request.GET["request"] != "GetCapabilities":
-                err = self.exception(exceptionCode="OperationNotSupported",
-                            locator=request.GET["request"])
-                return self.render_xml(err)
-            if "service" not in request.GET:
-                err = self.exception(exceptionCode="MissingParameterValue", locator="service")
-                return self.render_xml(err)
-            if request.GET["service"] != "CSW":
-                err = self.exception(exceptionCode="InvalidParameterValue", locator="service",
-                                     text=request.GET["service"])
-                return self.render_xml(err)
-            return self.get_capabilities()
+        ops = self._operations()
+        if "request" not in request.GET:
+            err = self._exception(exceptionCode="MissingParameterValue", locator="request")
+            return self._render_xml(err)
+        if request.GET["request"] not in ops:
+            err = self._exception(exceptionCode="OperationNotSupported",
+                                 locator=request.GET["request"])
+            return self._render_xml(err)
+        if "service" not in request.GET:
+            err = self._exception(exceptionCode="MissingParameterValue", locator="service")
+            return self._render_xml(err)
+        if request.GET["service"] != "CSW":
+            err = self._exception(exceptionCode="InvalidParameterValue", locator="service",
+                                 text=request.GET["service"])
+            return self._render_xml(err)
+        ## fill in some defaults
+        req = dict(request.GET.items())
+        req["startPosition"] = 1
+        req["maxRecords"] = 20
+        req["id"] = [req["id"]] if "id" in req else []
+        return ops[request.GET["request"]](req)
 
+    def dispatch_post(self):
+        self.rlog = __rlog__()
+        self.rlog.info("request environ\n%s", request.environ)
+        self.rlog.info("request headers\n%s", request.headers)
+        ops = self._operations()
         try:
             req = etree.parse(StringIO(request.body))
             self.rlog.info(u"request body\n%s", etree.tostring(req, pretty_print=True))
         except:
             self.rlog.info("request body\n%s", request.body)
             self.rlog.error("exception parsing body\n%s", traceback.format_exc())
-            err = self.exception(exceptionCode="MissingParameterValue", locator="request")
-            return self.render_xml(err)
+            err = self._exception(exceptionCode="MissingParameterValue", locator="request")
+            return self._render_xml(err)
         
         root = req.getroot()
-        if root.tag == "{http://www.opengis.net/cat/csw/2.0.2}GetCapabilities":
-            return self.get_capabilities()
-        if root.tag == "{http://www.opengis.net/cat/csw/2.0.2}GetRecordById":
-            return self.get_record_by_id(root)
-        if root.tag == "{http://www.opengis.net/cat/csw/2.0.2}GetRecords":
-            return self.get_records(root)
+        _unused, op = root.tag.rsplit("}", 1)
+        if op not in ops:
+            err = self._exception(exceptionCode="OperationNotSupported", locator=op)
+            return self._render_xml(err)
 
-        ### TODO: what is the proper exceptionCode??
-        err = self.execption(exceptionCode="UnsupportedRequest")
-        return self.render_xml(err)
-
-    def render_xml(self, root):
+        req = self._parse_xml_request(root)
+        if not isinstance(req, dict):
+            return req
+        return ops[op](req)
+    
+    def _render_xml(self, root):
         tree = etree.ElementTree(root)
         data = etree.tostring(tree, pretty_print=True)
         response.headers["Content-Length"] = len(data)
@@ -88,7 +100,7 @@ class CatalogueServiceWebController(BaseController):
         self.rlog.info("response.body:\n%s", data)
         return data
 
-    def exception(self, text=None, **kw):
+    def _exception(self, text=None, **kw):
         metaargs = {
             "nsmap": namespaces,
             "version": "1.0.0",
@@ -101,7 +113,75 @@ class CatalogueServiceWebController(BaseController):
             txt.text = text
         return root
 
-    def get_capabilities(self):
+    def _parse_xml_request(self, root):
+        """
+        Check common parts of the request for GetRecords, GetRecordById, etc.
+        Return a dictionary of parameters or else an XML error message (string).
+        The dictionary should be compatible with CSW GET requests
+        """
+        service = root.get("service")
+        if service is None:
+            err = self._exception(exceptionCode="MissingParameterValue", locator="service")
+            return self._render_xml(err)
+        elif service != "CSW":
+            err = self._exception(exceptionCode="InvalidParameterValue", locator="service", text=service)
+            return self._render_xml(err)
+        outputSchema = root.get("outputSchema", namespaces["gmd"])
+        if outputSchema != namespaces["gmd"]:
+            err = self._exception(exceptionCode="InvalidParameterValue", locator="outputSchema", text=outputSchema)
+            return self._render_xml(err)
+        resultType = root.get("resultType", "results")
+        if resultType != "results":
+            err = self._exception(exceptionCode="InvalidParameterValue", locator="resultType", text=resultType)
+            return self._render_xml(err)
+        outputFormat = root.get("outputFormat", "application/xml")
+        if outputFormat != "application/xml":
+            err = self._exception(exceptionCode="InvalidParameterValue", locator="outputFormat", text=outputFormat)
+            return self._render_xml(err)
+        elementSetName = root.get("elementSetName", "full")
+
+        params = {
+            "outputSchema": outputSchema,
+            "resultType": resultType,
+            "outputFormat": outputFormat,
+            "elementSetName": elementSetName
+            }
+
+        startPosition = root.get("startPosition", "1")
+        try:
+            params["startPosition"] = int(startPosition)
+        except:
+            err = self._exception(exceptionCode="InvalidParameterValue", locator="startPosition")
+            return self._render_xml(err)
+        maxRecords = root.get("maxRecords", "20")
+        try:
+            params["maxRecords"] = int(maxRecords)
+        except:
+            err = self._exception(exceptionCode="InvalidParameterValue", locator="maxRecords")
+            return self._render_xml(err)
+
+        params["id"] = [x.text for x in root.findall(ntag("csw:Id"))]
+        
+        query = root.find(ntag("csw:Query"))
+        if query is not None:
+            params.update(self._parse_query(query))
+            
+        if params["elementSetName"] not in ("full", "brief", "summary"):
+            err = self._exception(exceptionCode="InvalidParameterValue", locator="elementSetName",
+                                 text=params["elementSetName"])
+            return self._render_xml(err)
+
+        return params
+
+    def _parse_query(self, query):
+        params = {}
+        params["typeNames"] = query.get("typeNames", "csw:Record")
+        esn = query.find(ntag("csw:ElementSetName"))
+        if esn is not None:
+            params["elementSetName"] = esn.text
+        return params
+
+    def GetCapabilities(self, req):
         site = request.host_url + request.path        
         caps = etree.Element(ntag("csw:Capabilities"), nsmap=namespaces)
         srvid = etree.SubElement(caps, ntag("ows:ServiceIdentification"))
@@ -130,7 +210,7 @@ class CatalogueServiceWebController(BaseController):
             }
         etree.SubElement(provider, ntag("ows:ProviderSite"), **attrs)
 
-        contact = etree.SubElement(caps, ntag("ows:ServiceContact"))
+        contact = etree.SubElement(provider, ntag("ows:ServiceContact"))
         name = etree.SubElement(contact, ntag("ows:IndividualName"))
         name.text = unicode(config["cswservice.contact_name"])
         pos = etree.SubElement(contact, ntag("ows:PositionName"))
@@ -167,8 +247,9 @@ class CatalogueServiceWebController(BaseController):
         dcp = etree.SubElement(op, ntag("ows:DCP"))
         http = etree.SubElement(dcp, ntag("ows:HTTP"))
         attrs = { ntag("xlink:href"): site }
-        etree.SubElement(http, ntag("ows:Post"), **attrs)
-        pe = etree.SubElement(op, ntag("ows:Constraint"), name="PostEncoding")
+        etree.SubElement(http, ntag("ows:Get"), **attrs)
+        post = etree.SubElement(http, ntag("ows:Post"), **attrs)
+        pe = etree.SubElement(post, ntag("ows:Constraint"), name="PostEncoding")
         val = etree.SubElement(pe, ntag("ows:Value"))
         val.text = "XML"
 
@@ -176,8 +257,9 @@ class CatalogueServiceWebController(BaseController):
         dcp = etree.SubElement(op, ntag("ows:DCP"))
         http = etree.SubElement(dcp, ntag("ows:HTTP"))
         attrs = { ntag("xlink:href"): site }
-        etree.SubElement(http, ntag("ows:Post"), **attrs)
-        pe = etree.SubElement(op, ntag("ows:Constraint"), name="PostEncoding")
+        etree.SubElement(http, ntag("ows:Get"), **attrs)
+        post = etree.SubElement(http, ntag("ows:Post"), **attrs)
+        pe = etree.SubElement(post, ntag("ows:Constraint"), name="PostEncoding")
         val = etree.SubElement(pe, ntag("ows:Value"))
         val.text = "XML"
         param = etree.SubElement(op, ntag("ows:Parameter"), name="resultType")
@@ -197,8 +279,9 @@ class CatalogueServiceWebController(BaseController):
         dcp = etree.SubElement(op, ntag("ows:DCP"))
         http = etree.SubElement(dcp, ntag("ows:HTTP"))
         attrs = { ntag("xlink:href"): site }
-        etree.SubElement(http, ntag("ows:Post"), **attrs)
-        pe = etree.SubElement(op, ntag("ows:Constraint"), name="PostEncoding")
+        etree.SubElement(http, ntag("ows:Get"), **attrs)
+        post = etree.SubElement(http, ntag("ows:Post"), **attrs)
+        pe = etree.SubElement(post, ntag("ows:Constraint"), name="PostEncoding")
         val = etree.SubElement(pe, ntag("ows:Value"))
         val.text = "XML"
         param = etree.SubElement(op, ntag("ows:Parameter"), name="resultType")
@@ -214,6 +297,21 @@ class CatalogueServiceWebController(BaseController):
         val = etree.SubElement(param, ntag("ows:Value"))
         val.text = "gmd:MD_Metadata"
 
+#        op = etree.SubElement(opmeta, ntag("ows:Operation"), name="Harvest")
+#        dcp = etree.SubElement(op, ntag("ows:DCP"))
+#        http = etree.SubElement(dcp, ntag("ows:HTTP"))
+#        attrs = { ntag("xlink:href"): site }
+#        post = etree.SubElement(http, ntag("ows:Post"), **attrs)
+#        pe = etree.SubElement(post, ntag("ows:Constraint"), name="PostEncoding")
+#        val = etree.SubElement(pe, ntag("ows:Value"))
+#        val.text = "XML"
+#        param = etree.SubElement(op, ntag("ows:Parameter"), name="outputFormat")
+#        val = etree.SubElement(param, ntag("ows:Value"))
+#        val.text = "application/xml"
+#        param = etree.SubElement(op, ntag("ows:Parameter"), name="outputSchema")
+#        val = etree.SubElement(param, ntag("ows:Value"))
+#        val.text = "http://www.isotc211.org/2005/gmd"
+        
         filcap = etree.SubElement(caps, ntag("ogc:Filter_Capabilities"))
         spacap = etree.SubElement(filcap, ntag("ogc:Spatial_Capabilities"))
         geomop = etree.SubElement(spacap, ntag("ogc:GeometryOperands"))
@@ -227,63 +325,9 @@ class CatalogueServiceWebController(BaseController):
         eid = etree.SubElement(idcap, ntag("ogc:EID"))
         fid = etree.SubElement(idcap, ntag("ogc:FID"))
         
-        return self.render_xml(caps)
-        
-    def _parse_request_common(self, root):
-        """
-        Check common parts of the request for GetRecords, GetRecordById, etc.
-        Return a dictionary of parameters or else an XML error message (string)
-        """
-        service = root.get("service")
-        if service is None:
-            err = self.exception(exceptionCode="MissingParameterValue", locator="service")
-            return self.render_xml(err)
-        elif service != "CSW":
-            err = self.exception(exceptionCode="InvalidParameterValue", locator="service", text=service)
-            return self.render_xml(err)
-        outputSchema = root.get("outputSchema", namespaces["gmd"])
-        if outputSchema != namespaces["gmd"]:
-            err = self.exception(exceptionCode="InvalidParameterValue", locator="outputSchema", text=outputSchema)
-            return self.render_xml(err)
-        resultType = root.get("resultType", "results")
-        if resultType != "results":
-            err = self.exception(exceptionCode="InvalidParameterValue", locator="resultType", text=resultType)
-            return self.render_xml(err)
-        outputFormat = root.get("outputFormat", "application/xml")
-        if outputFormat != "application/xml":
-            err = self.exception(exceptionCode="InvalidParameterValue", locator="outputFormat", text=outputFormat)
-            return self.render_xml(err)
-        elementSetName = root.get("elementSetName", "full")
-        if elementSetName not in ("full", "brief"):
-            err = self.exception(exceptionCode="InvalidParameterValue", locator="elementSetName", text=elementSetName)
-            return self.render_xml(err)
-
-        params = {
-            "outputSchema": outputSchema,
-            "resultType": resultType,
-            "outputFormat": outputFormat,
-            "elementSetName": elementSetName
-            }
-        return params
+        return self._render_xml(caps)
     
-    def get_records(self, root):
-        req = self._parse_request_common(root)
-        if not isinstance(req, dict):
-            return req
-        
-        startPosition = root.get("startPosition", "0")
-        try:
-            startPosition = int(startPosition)
-        except:
-            err = self.exception(exceptionCode="InvalidParameterValue", locator="startPosition")
-            return self.render_xml(err)
-        maxRecords = root.get("maxRecords", "0")
-        try:
-            maxRecords = int(maxRecords)
-        except:
-            err = self.exception(exceptionCode="InvalidParameterValue", locator="maxRecords")
-            return self.render_xml(err)
-
+    def GetRecords(self, req):
         resp = etree.Element(ntag("csw:GetRecordsResponse"), nsmap=namespaces)
         etree.SubElement(resp, ntag("csw:SearchStatus"), timestamp=datetime.utcnow().isoformat())
 
@@ -294,14 +338,14 @@ class CatalogueServiceWebController(BaseController):
                     ).order_by(HarvestedDocument.created.desc()
                                )
         ### TODO Parse query instead of stupidly just returning whatever we like
-        rset = q.offset(startPosition).limit(maxRecords)
+        rset = q.offset(req["startPosition"]-1).limit(req["maxRecords"])
 
         total = Session.execute(q.alias().count()).first()[0]
         returned = Session.execute(rset.alias().count()).first()[0]
         attrs = {
             "numberOfRecordsMatched": total,
             "numberOfRecordsReturned": returned,
-            "elementSet": "full"
+            "elementSet": req["elementSetName"], # we lie here. it's always really "full"
             }
         if attrs["numberOfRecordsMatched"] > attrs["numberOfRecordsReturned"]:
             attrs["nextRecord"]  = attrs["numberOfRecordsReturned"] + 1
@@ -320,18 +364,14 @@ class CatalogueServiceWebController(BaseController):
                 log.error("exception parsing document %s:\n%s", doc.id, traceback.format_exc())
                 raise
             
-        return self.render_xml(resp)
+        return self._render_xml(resp)
 
-    def get_record_by_id(self, root):
-        req = self._parse_request_common(root)
-        if not isinstance(req, dict):
-            return req
-
+    def GetRecordById(self, req):
         resp = etree.Element(ntag("csw:GetRecordByIdResponse"), nsmap=namespaces)
         seen = set()
-        for ident in root.findall(ntag("csw:Id")):
+        for ident in req["id"]:
             doc = Session.query(HarvestedDocument
-                                ).filter(HarvestedDocument.guid==ident.text,
+                                ).filter(HarvestedDocument.guid==ident,
                                          ).order_by(HarvestedDocument.created.desc()
                                                     ).limit(1).first()
             if doc is None:
@@ -343,7 +383,7 @@ class CatalogueServiceWebController(BaseController):
                 log.error("exception parsing document %s:\n%s", doc.id, traceback.format_exc())
                 raise
 
-        return self.render_xml(resp)
+        return self._render_xml(resp)
 
 ### <ns0:GetRecords xmlns:ns0="http://www.opengis.net/cat/csw/2.0.2" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" outputSchema="http://www.isotc211.org/2005/gmd" outputFormat="application/xml" version="2.0.2" resultType="results" service="CSW" startPosition="1" maxRecords="5" xsi:schemaLocation="http://www.opengis.net/cat/csw/2.0.2 http://schemas.opengis.net/csw/2.0.2/CSW-discovery.xsd">
 ###     <ns0:Query typeNames="csw:Record">

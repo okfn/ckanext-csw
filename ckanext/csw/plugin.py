@@ -28,8 +28,10 @@ class CatalogueServiceWeb(SingletonPlugin):
         
     def before_map(self, route_map):
         c = "ckanext.csw.controller:CatalogueServiceWebController"
-        route_map.connect("/csw", controller=c, action="dispatch",
-                          conditions={"method": ["GET", "POST"]})
+        route_map.connect("/csw", controller=c, action="dispatch_get",
+                          conditions={"method": ["GET"]})
+        route_map.connect("/csw", controller=c, action="dispatch_post",
+                          conditions={"method": ["POST"]})
         return route_map
 
     def after_map(self, route_map):
