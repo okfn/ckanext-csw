@@ -58,7 +58,7 @@ class CswService(OwsService):
     Perform various operations on a CSW service
     """
     from owslib.csw import CatalogueServiceWeb as _Implementation
-    def getrecords(self, qtype="service", keywords=[],
+    def getrecords(self, qtype=None, keywords=[],
                    typenames="csw:Record", esn="brief",
                    skip=0, count=10, **kw):
         csw = self._ows(**kw)
@@ -73,7 +73,7 @@ class CswService(OwsService):
         csw.getrecords(**kwa)
         return [self._xmd(r) for r in csw.records.values()]
 
-    def getidentifiers(self, qtype="service", typenames="csw:Record", esn="brief",
+    def getidentifiers(self, qtype=None, typenames="csw:Record", esn="brief",
                        keywords=[], limit=None, page=10, **kw):
         csw = self._ows(**kw)
         kwa = {
