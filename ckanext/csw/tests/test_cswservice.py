@@ -7,13 +7,14 @@ from urllib2 import urlopen
 from owslib.csw import CatalogueServiceWeb
 from owslib.iso import MD_Metadata
 
-service = "http://ec2-46-51-149-132.eu-west-1.compute.amazonaws.com:8080/geonetwork/srv/csw"
+
 service = "http://ogcdev.bgs.ac.uk/geonetwork/srv/en/csw"
-#service = "http://localhost:5000/csw"
+service = "http://ec2-46-51-149-132.eu-west-1.compute.amazonaws.com:8080/geonetwork/srv/csw"
+service = "http://localhost:5000/csw"
 
 GMD = "http://www.isotc211.org/2005/gmd"
 
-class TestInvalidPost(unittest.TestCase):
+class TestInvalid(unittest.TestCase):
     def test_invalid(self):
         params = urllib.urlencode({'spam': 1, 'eggs': 2, 'bacon': 0})
         f = urlopen(service, params)
@@ -21,6 +22,27 @@ class TestInvalidPost(unittest.TestCase):
         f.close()
         assert "MissingParameterValue" in response, response
         assert 'locator="request"' in response, response
+
+    def test_empty(self):
+        fp = urlopen(service)
+        response = fp.read()
+        fp.close()
+        assert "MissingParameterValue" in response, response
+        assert 'locator="request"' in response, response
+
+    def test_invalid_request(self):
+        fp = urlopen(service + "?request=foo")
+        response = fp.read()
+        fp.close()
+        assert "OperationNotSupported" in response, response
+        assert 'locator="foo"' in response, response
+
+    def test_invalid_service(self):
+        fp = urlopen(service + "?request=GetCapabilities&service=hello")
+        response = fp.read()
+        fp.close()
+        assert "InvalidParameterValue" in response, response
+        assert 'locator="service"' in response, response
 
 class TestGetCapabilities(unittest.TestCase):
     def test_good(self):
@@ -31,23 +53,6 @@ class TestGetCapabilities(unittest.TestCase):
         assert "GetRecords" in caps
         assert "GetRecordById" in caps
 
-    def test_empty(self):
-        fp = urlopen(service)
-        caps = fp.read()
-        fp.close()
-        assert "MissingParameterValue" in caps and "request" in caps
-
-    def test_invalid_request(self):
-        fp = urlopen(service + "?request=foo")
-        caps = fp.read()
-        fp.close()
-        assert "OperationNotSupported" in caps
-
-    def test_invalid_service(self):
-        fp = urlopen(service + "?request=GetCapabilities&service=hello")
-        caps = fp.read()
-        fp.close()
-        assert "InvalidParameterValue" in caps and "hello" in caps
         
     def test_good_post(self):
         csw = CatalogueServiceWeb(service)

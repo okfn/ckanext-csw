@@ -42,18 +42,18 @@ class CatalogueServiceWebController(BaseController):
         self.rlog.info("request headers\n%s", request.headers)
         if request.method == "GET":
             if "request" not in request.GET:
-                err = self.exception(exceptionCode="MissingParameterValue", location="request")
+                err = self.exception(exceptionCode="MissingParameterValue", locator="request")
                 return self.render_xml(err)
             if request.GET["request"] != "GetCapabilities":
                 err = self.exception(exceptionCode="OperationNotSupported",
-                            location=request.GET["request"])
+                            locator=request.GET["request"])
                 return self.render_xml(err)
             if "service" not in request.GET:
-                err = self.exception(exceptionCode="MissingParameterValue", location="service")
+                err = self.exception(exceptionCode="MissingParameterValue", locator="service")
                 return self.render_xml(err)
             if request.GET["service"] != "CSW":
-                err = self.exception(exceptionCode="InvalidParameterValue",
-                            location=request.GET["service"])
+                err = self.exception(exceptionCode="InvalidParameterValue", locator="service",
+                                     text=request.GET["service"])
                 return self.render_xml(err)
             return self.get_capabilities()
 
@@ -88,14 +88,17 @@ class CatalogueServiceWebController(BaseController):
         self.rlog.info("response.body:\n%s", data)
         return data
 
-    def exception(self, **kw):
+    def exception(self, text=None, **kw):
         metaargs = {
             "nsmap": namespaces,
             "version": "1.0.0",
             ntag("xsi:schemaLocation"): "http://schemas.opengis.net/ows/1.0.0/owsExceptionReport.xsd",
         }
         root = etree.Element(ntag("ows:ExceptionReport"), **metaargs)
-        etree.SubElement(root, ntag("ows:Exception"), **kw)
+        exc = etree.SubElement(root, ntag("ows:Exception"), **kw)
+        if text is not None:
+            txt = etree.SubElement(exc, ntag("ows:ExceptionText"))
+            txt.text = text
         return root
 
     def get_capabilities(self):
@@ -233,26 +236,26 @@ class CatalogueServiceWebController(BaseController):
         """
         service = root.get("service")
         if service is None:
-            err = self.exception(exceptionCode="MissingParameterValue", location="service")
+            err = self.exception(exceptionCode="MissingParameterValue", locator="service")
             return self.render_xml(err)
         elif service != "CSW":
-            err = self.exception(exceptionCode="InvalidParameterValue", location="service")
+            err = self.exception(exceptionCode="InvalidParameterValue", locator="service", text=service)
             return self.render_xml(err)
         outputSchema = root.get("outputSchema", namespaces["gmd"])
         if outputSchema != namespaces["gmd"]:
-            err = self.exception(exceptionCode="InvalidParameterValue", location="outputSchema")
+            err = self.exception(exceptionCode="InvalidParameterValue", locator="outputSchema", text=outputSchema)
             return self.render_xml(err)
         resultType = root.get("resultType", "results")
         if resultType != "results":
-            err = self.exception(exceptionCode="InvalidParameterValue", location="resultType")
+            err = self.exception(exceptionCode="InvalidParameterValue", locator="resultType", text=resultType)
             return self.render_xml(err)
         outputFormat = root.get("outputFormat", "application/xml")
         if outputFormat != "application/xml":
-            err = self.exception(exceptionCode="InvalidParameterValue", location="outputFormat")
+            err = self.exception(exceptionCode="InvalidParameterValue", locator="outputFormat", text=outputFormat)
             return self.render_xml(err)
         elementSetName = root.get("elementSetName", "full")
         if elementSetName not in ("full", "brief"):
-            err = self.exception(exceptionCode="InvalidParameterValue", location="elementSetName")
+            err = self.exception(exceptionCode="InvalidParameterValue", locator="elementSetName", text=elementSetName)
             return self.render_xml(err)
 
         params = {
@@ -272,13 +275,13 @@ class CatalogueServiceWebController(BaseController):
         try:
             startPosition = int(startPosition)
         except:
-            err = self.exception(exceptionCode="InvalidParameterValue", location="startPosition")
+            err = self.exception(exceptionCode="InvalidParameterValue", locator="startPosition")
             return self.render_xml(err)
         maxRecords = root.get("maxRecords", "0")
         try:
             maxRecords = int(maxRecords)
         except:
-            err = self.exception(exceptionCode="InvalidParameterValue", location="maxRecords")
+            err = self.exception(exceptionCode="InvalidParameterValue", locator="maxRecords")
             return self.render_xml(err)
 
         resp = etree.Element(ntag("csw:GetRecordsResponse"), nsmap=namespaces)
