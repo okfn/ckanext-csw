@@ -71,6 +71,7 @@ class Get_01_Records(unittest.TestCase):
         csw = CatalogueServiceWeb(service)
         csw.getrecords(outputschema=GMD, startposition=1, maxrecords=5)
         nrecords = len(csw.records)
+        #print csw.response[:1024]
         assert nrecords == 5, nrecords
         for ident in csw.records:
             identifiers.append(ident)

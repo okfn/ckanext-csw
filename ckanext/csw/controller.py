@@ -61,7 +61,7 @@ class CatalogueServiceWebController(BaseController):
         ## fill in some defaults
         req = dict(request.GET.items())
         req["startPosition"] = 1
-        req["maxRecords"] = 20
+        req["maxRecords"] = 10
         req["id"] = [req["id"]] if "id" in req else []
         return ops[request.GET["request"]](req)
 
@@ -131,7 +131,7 @@ class CatalogueServiceWebController(BaseController):
             err = self._exception(exceptionCode="InvalidParameterValue", locator="outputSchema", text=outputSchema)
             return self._render_xml(err)
         resultType = root.get("resultType", "results")
-        if resultType != "results":
+        if resultType not in ("results", "hits"):
             err = self._exception(exceptionCode="InvalidParameterValue", locator="resultType", text=resultType)
             return self._render_xml(err)
         outputFormat = root.get("outputFormat", "application/xml")
@@ -153,7 +153,7 @@ class CatalogueServiceWebController(BaseController):
         except:
             err = self._exception(exceptionCode="InvalidParameterValue", locator="startPosition")
             return self._render_xml(err)
-        maxRecords = root.get("maxRecords", "20")
+        maxRecords = root.get("maxRecords", "10")
         try:
             params["maxRecords"] = int(maxRecords)
         except:
@@ -339,32 +339,39 @@ class CatalogueServiceWebController(BaseController):
                                )
         ### TODO Parse query instead of stupidly just returning whatever we like
         startPosition = req["startPosition"] if req["startPosition"] > 0 else 1
-        maxRecords = req["maxRecords"] if req["maxRecords"] > 0 else 20
+        maxRecords = req["maxRecords"] if req["maxRecords"] > 0 else 10
         rset = q.offset(startPosition-1).limit(maxRecords)
 
         total = Session.execute(q.alias().count()).first()[0]
-        returned = Session.execute(rset.alias().count()).first()[0]
         attrs = {
             "numberOfRecordsMatched": total,
-            "numberOfRecordsReturned": returned,
             "elementSet": req["elementSetName"], # we lie here. it's always really "full"
             }
-        if attrs["numberOfRecordsMatched"] > attrs["numberOfRecordsReturned"]:
-            attrs["nextRecord"]  = attrs["numberOfRecordsReturned"] + 1
+        if req["resultType"] == "results":
+            returned = Session.execute(rset.alias().count()).first()[0]
+            attrs["numberOfRecordsReturned"] = returned
+            if (total-startPosition-1) > returned:
+                attrs["nextRecord"] = startPosition + returned
+            else:
+                attrs["nextRecord"] = 0
+        else:
+            attrs["numberOfRecordsReturned"] = 0
+
         attrs = dict((k, unicode(v)) for k,v in attrs.items())
         results = etree.SubElement(resp, ntag("csw:SearchResults"), **attrs)
-                                                          
-        for guid, in Session.execute(rset):
-            doc = Session.query(HarvestedDocument
-                                ).filter(HarvestedDocument.guid==guid
-                                         ).order_by(HarvestedDocument.created.desc()
-                                                    ).limit(1).first()
-            try:
-                record = etree.parse(StringIO(doc.content.encode("utf-8")))
-                results.append(record.getroot())
-            except:
-                log.error("exception parsing document %s:\n%s", doc.id, traceback.format_exc())
-                raise
+
+        if req["resultType"] == "results":
+            for guid, in Session.execute(rset):
+                doc = Session.query(HarvestedDocument
+                                    ).filter(HarvestedDocument.guid==guid
+                                             ).order_by(HarvestedDocument.created.desc()
+                                                        ).limit(1).first()
+                try:
+                    record = etree.parse(StringIO(doc.content.encode("utf-8")))
+                    results.append(record.getroot())
+                except:
+                    log.error("exception parsing document %s:\n%s", doc.id, traceback.format_exc())
+                    raise
             
         return self._render_xml(resp)
 
