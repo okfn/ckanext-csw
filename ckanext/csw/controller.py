@@ -60,8 +60,20 @@ class CatalogueServiceWebController(BaseController):
             return self._render_xml(err)
         ## fill in some defaults
         req = dict(request.GET.items())
-        req["startPosition"] = 1
-        req["maxRecords"] = 10
+        startPosition = req.get("startPosition", 1)
+        try:
+            req["startPosition"] = int(startPosition)
+        except:
+            err = self._exception(exceptionCode="InvalidParameterValue", locator="startPosition",
+                                  text=unicode(startPosition))
+            return self._render_xml(err)
+        maxRecords = req.get("maxRecords", 10)
+        try:
+            req["maxRecords"] = int(maxRecords)
+        except:
+            err = self._exception(exceptionCode="InvalidParameterValue", locator="maxRecords",
+                                  text=unicode(startPosition))
+            return self._render_xml(err)
         req["id"] = [req["id"]] if "id" in req else []
         return ops[request.GET["request"]](req)
 
