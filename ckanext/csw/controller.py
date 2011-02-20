@@ -340,7 +340,7 @@ class CatalogueServiceWebController(BaseController):
         ### TODO Parse query instead of stupidly just returning whatever we like
         startPosition = req["startPosition"] if req["startPosition"] > 0 else 1
         maxRecords = req["maxRecords"] if req["maxRecords"] > 0 else 20
-        rset = q.offset(startPosition).limit(maxRecords)
+        rset = q.offset(startPosition-1).limit(maxRecords)
 
         total = Session.execute(q.alias().count()).first()[0]
         returned = Session.execute(rset.alias().count()).first()[0]
