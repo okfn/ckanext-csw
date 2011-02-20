@@ -338,7 +338,9 @@ class CatalogueServiceWebController(BaseController):
                     ).order_by(HarvestedDocument.created.desc()
                                )
         ### TODO Parse query instead of stupidly just returning whatever we like
-        rset = q.offset(req["startPosition"]-1).limit(req["maxRecords"])
+        startPosition = req["startPosition"] if req["startPosition"] > 0 else 1
+        maxRecords = req["maxRecords"] if req["maxRecords"] > 0 else 20
+        rset = q.offset(startPosition).limit(maxRecords)
 
         total = Session.execute(q.alias().count()).first()[0]
         returned = Session.execute(rset.alias().count()).first()[0]

@@ -84,13 +84,11 @@ class Get_01_Records(unittest.TestCase):
     def test_GetRecords_brief(self):
         csw = CatalogueServiceWeb(service)
         csw.getrecords(outputschema=GMD, startposition=1, maxrecords=5, esn="brief")
-        print csw.response
         nrecords = len(csw.records)
 
     def test_GetRecords_summary(self):
         csw = CatalogueServiceWeb(service)
         csw.getrecords(outputschema=GMD, startposition=1, maxrecords=5, esn="summary")
-        print csw.response
         nrecords = len(csw.records)
         
 class Get_02_RecordById(unittest.TestCase):
