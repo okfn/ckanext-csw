@@ -419,3 +419,37 @@ class CatalogueServiceWebController(BaseController):
 ###         </ns0:Constraint>
 ###     </ns0:Query>
 ### </ns0:GetRecords>
+
+from pkg_resources import resource_stream, resource_filename
+from lxml import etree
+
+class HarvestedDocumentController(BaseController):
+    def display_xml(self, guid):
+        doc = Session.query(HarvestedDocument
+                            ).filter(HarvestedDocument.guid==guid
+                                     ).order_by(HarvestedDocument.created.desc()
+                                                ).limit(1).first()
+        if doc is None:
+            abort(404)
+        response.content_type = "application/xml"
+        response.headers["Content-Length"] = len(doc.content)
+        return doc.content
+
+    def display_html(self, guid):
+        doc = Session.query(HarvestedDocument
+                            ).filter(HarvestedDocument.guid==guid
+                                     ).order_by(HarvestedDocument.created.desc()
+                                                ).limit(1).first()
+        if doc is None:
+            abort(404)
+        ## optimise -- read transform only once and compile rather
+        ## than at each request
+        with resource_stream("ckanext.csw",
+                             "xml/parslow/gemini2-html-stylesheet.xsl") as style:
+            style_xml = etree.parse(style)
+            transformer = etree.XSLT(style_xml)
+        more_than_meets_the_eyes = etree.parse(StringIO(doc.content.encode("utf-8")))
+        html = transformer(more_than_meets_the_eyes)
+        return etree.tostring(html, pretty_print=True)
+            
+        
