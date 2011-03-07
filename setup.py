@@ -17,7 +17,7 @@ setup(
     url='http://ckan.org/wiki/csw',
     description='CKAN official extensions',
     keywords='data packaging csw geodata catalogue',
-    install_requires=requirements,
+    #install_requires=requirements,
     packages=find_packages(),
     include_package_data=True,
     entry_points="""
