@@ -44,22 +44,27 @@ class CatalogueServiceWebController(BaseController):
         self.rlog.info("request environ\n%s", request.environ)
         self.rlog.info("request headers\n%s", request.headers)
         ops = self._operations()
-        if "request" not in request.GET:
+        req = dict(request.GET.items())
+
+        ## special cases
+	if "REQUEST" in req: req["request"] = req["REQUEST"]
+        if "SERVICE" in req: req["service"] = req["SERVICE"]
+
+        if "request" not in req:
             err = self._exception(exceptionCode="MissingParameterValue", locator="request")
             return self._render_xml(err)
-        if request.GET["request"] not in ops:
+        if req["request"] not in ops:
             err = self._exception(exceptionCode="OperationNotSupported",
-                                 locator=request.GET["request"])
+                                 locator=req["request"])
             return self._render_xml(err)
-        if "service" not in request.GET:
+        if "service" not in req:
             err = self._exception(exceptionCode="MissingParameterValue", locator="service")
             return self._render_xml(err)
-        if request.GET["service"] != "CSW":
+        if req["service"] != "CSW":
             err = self._exception(exceptionCode="InvalidParameterValue", locator="service",
-                                 text=request.GET["service"])
+                                 text=req["service"])
             return self._render_xml(err)
         ## fill in some defaults
-        req = dict(request.GET.items())
         startPosition = req.get("startPosition", 1)
         try:
             req["startPosition"] = int(startPosition)
@@ -75,7 +80,7 @@ class CatalogueServiceWebController(BaseController):
                                   text=unicode(startPosition))
             return self._render_xml(err)
         req["id"] = [req["id"]] if "id" in req else []
-        return ops[request.GET["request"]](req)
+        return ops[req["request"]](req)
 
     def dispatch_post(self):
         self.rlog = __rlog__()
