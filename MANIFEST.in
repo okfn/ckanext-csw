@@ -1,9 +1,6 @@
-MANIFEST.in
-COPYRIGHT
-README
 recursive-include ckanext *.py
-recursive-include ckanext/csw/xml *.sch
-recursive-include ckanext/csw/xml *.txt
-recursive-include ckanext/csw/xml *.xsl
+recursive-include ckanext *.sch
+recursive-include ckanext *.txt
+recursive-include ckanext *.xsl
+recursive-include ckanext *.xsd
 include setup.py
-include setup.cfg
