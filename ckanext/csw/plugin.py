@@ -46,7 +46,9 @@ class CatalogueServiceWeb(SingletonPlugin):
                           action="display_xml")
         route_map.connect("/api/2/rest/harvesteddocument/:guid/html", controller=hdc,
                           action="display_html")
-        
+        route_map.connect("/api/2/rest/harvesteddocument/:guid/xml/:guid2.xml", controller=hdc, 
+                action="display_xml")
+       
         return route_map
 
     def after_map(self, route_map):
