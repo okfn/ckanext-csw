@@ -8,7 +8,8 @@ from owslib.csw import namespaces
 from sqlalchemy import select
 from ckan.lib.base import BaseController
 from ckan.model.meta import Session
-from ckan.model.harvesting import HarvestedDocument
+
+from ckanext.harvest.model import HarvestedDocument
 
 namespaces["xlink"] = "http://www.w3.org/1999/xlink"
 
