@@ -5,11 +5,11 @@ from datetime import datetime
 from pylons import request, response, config
 from lxml import etree
 from owslib.csw import namespaces
-from sqlalchemy import select
+from sqlalchemy import select,distinct
 from ckan.lib.base import BaseController
 from ckan.model.meta import Session
 
-from ckanext.harvest.model import HarvestedDocument
+from ckanext.harvest.model import HarvestObject
 
 namespaces["xlink"] = "http://www.w3.org/1999/xlink"
 
@@ -351,10 +351,13 @@ class CatalogueServiceWebController(BaseController):
 
         cursor = Session.connection()
         
-        #q = Session.query(HarvestedDocument).order_by(HarvestedDocument.created.desc())
+
+        q = select(columns=[HarvestObject.guid],distinct=True).where(HarvestObject.package!=None)
+        '''
         q  = select([HarvestedDocument.guid]
                     ).order_by(HarvestedDocument.created.desc()
-                               )
+                                       )
+        '''
         ### TODO Parse query instead of stupidly just returning whatever we like
         startPosition = req["startPosition"] if req["startPosition"] > 0 else 1
         maxRecords = req["maxRecords"] if req["maxRecords"] > 0 else 10
@@ -380,10 +383,12 @@ class CatalogueServiceWebController(BaseController):
 
         if req["resultType"] == "results":
             for guid, in Session.execute(rset):
-                doc = Session.query(HarvestedDocument
-                                    ).filter(HarvestedDocument.guid==guid
-                                             ).order_by(HarvestedDocument.created.desc()
+                doc = Session.query(HarvestObject
+                                    ).filter(HarvestObject.guid==guid
+                                        ).filter(HarvestObject.package!=None
+                                             ).order_by(HarvestObject.created.desc()
                                                         ).limit(1).first()
+
                 try:
                     record = etree.parse(StringIO(doc.content.encode("utf-8")))
                     results.append(record.getroot())
@@ -397,9 +402,10 @@ class CatalogueServiceWebController(BaseController):
         resp = etree.Element(ntag("csw:GetRecordByIdResponse"), nsmap=namespaces)
         seen = set()
         for ident in req["id"]:
-            doc = Session.query(HarvestedDocument
-                                ).filter(HarvestedDocument.guid==ident,
-                                         ).order_by(HarvestedDocument.created.desc()
+            doc = Session.query(HarvestObject
+                                ).filter(HarvestObject.guid==ident
+                                    ).filter(HarvestObject.package!=None
+                                         ).order_by(HarvestObject.created.desc()
                                                     ).limit(1).first()
             if doc is None:
                 continue
@@ -425,37 +431,4 @@ class CatalogueServiceWebController(BaseController):
 ###         </ns0:Constraint>
 ###     </ns0:Query>
 ### </ns0:GetRecords>
-
-from pkg_resources import resource_stream, resource_filename
-from lxml import etree
-
-class HarvestedDocumentController(BaseController):
-    def display_xml(self, guid):
-        doc = Session.query(HarvestedDocument
-                            ).filter(HarvestedDocument.guid==guid
-                                     ).order_by(HarvestedDocument.created.desc()
-                                                ).limit(1).first()
-        if doc is None:
-            abort(404)
-        response.content_type = "application/xml"
-        response.headers["Content-Length"] = len(doc.content)
-        return doc.content
-
-    def display_html(self, guid):
-        doc = Session.query(HarvestedDocument
-                            ).filter(HarvestedDocument.guid==guid
-                                     ).order_by(HarvestedDocument.created.desc()
-                                                ).limit(1).first()
-        if doc is None:
-            abort(404)
-        ## optimise -- read transform only once and compile rather
-        ## than at each request
-        with resource_stream("ckanext.csw",
-                             "xml/parslow/gemini2-html-stylesheet.xsl") as style:
-            style_xml = etree.parse(style)
-            transformer = etree.XSLT(style_xml)
-        more_than_meets_the_eyes = etree.parse(StringIO(doc.content.encode("utf-8")))
-        html = transformer(more_than_meets_the_eyes)
-        return etree.tostring(html, pretty_print=True)
-            
-        
+      

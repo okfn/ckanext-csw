@@ -33,22 +33,6 @@ class CatalogueServiceWeb(SingletonPlugin):
         route_map.connect("/csw", controller=c, action="dispatch_post",
                           conditions={"method": ["POST"]})
 
-        hdc = "ckanext.csw.controller:HarvestedDocumentController"
-        route_map.connect("/api/rest/harvesteddocument/:guid/xml", controller=hdc,
-                          action="display_xml")
-        route_map.connect("/api/rest/harvesteddocument/:guid/html", controller=hdc,
-                          action="display_html")
-        route_map.connect("/api/1/rest/harvesteddocument/:guid/xml", controller=hdc,
-                          action="display_xml")
-        route_map.connect("/api/1/rest/harvesteddocument/:guid/html", controller=hdc,
-                          action="display_html")
-        route_map.connect("/api/2/rest/harvesteddocument/:guid/xml", controller=hdc,
-                          action="display_xml")
-        route_map.connect("/api/2/rest/harvesteddocument/:guid/html", controller=hdc,
-                          action="display_html")
-        route_map.connect("/api/2/rest/harvesteddocument/:guid/xml/:guid2.xml", controller=hdc, 
-                action="display_xml")
-       
         return route_map
 
     def after_map(self, route_map):
