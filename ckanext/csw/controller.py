@@ -388,13 +388,14 @@ class CatalogueServiceWebController(BaseController):
                                         ).filter(HarvestObject.package!=None
                                              ).order_by(HarvestObject.gathered.desc()
                                                         ).limit(1).first()
-
-                try:
-                    record = etree.parse(StringIO(doc.content.encode("utf-8")))
-                    results.append(record.getroot())
-                except:
-                    log.error("exception parsing document %s:\n%s", doc.id, traceback.format_exc())
-                    raise
+                #TODO: Use proper checking with source type
+                if 'MD_Metadata' in doc.content:
+                    try:
+                        record = etree.parse(StringIO(doc.content.encode("utf-8")))
+                        results.append(record.getroot())
+                    except:
+                        log.error("exception parsing document %s:\n%s", doc.id, traceback.format_exc())
+                        raise
             
         return self._render_xml(resp)
 
@@ -409,12 +410,15 @@ class CatalogueServiceWebController(BaseController):
                                                     ).limit(1).first()
             if doc is None:
                 continue
-            try:
-                record = etree.parse(StringIO(doc.content.encode("utf-8")))
-                resp.append(record.getroot())
-            except:
-                log.error("exception parsing document %s:\n%s", doc.id, traceback.format_exc())
-                raise
+
+            #TODO: Use proper checking with source type
+            if 'MD_Metadata' in doc.content:    
+                try:
+                    record = etree.parse(StringIO(doc.content.encode("utf-8")))
+                    resp.append(record.getroot())
+                except:
+                    log.error("exception parsing document %s:\n%s", doc.id, traceback.format_exc())
+                    raise
 
         return self._render_xml(resp)
 
