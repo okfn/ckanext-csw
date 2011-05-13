@@ -386,7 +386,7 @@ class CatalogueServiceWebController(BaseController):
                 doc = Session.query(HarvestObject
                                     ).filter(HarvestObject.guid==guid
                                         ).filter(HarvestObject.package!=None
-                                             ).order_by(HarvestObject.created.desc()
+                                             ).order_by(HarvestObject.gathered.desc()
                                                         ).limit(1).first()
 
                 try:
@@ -405,7 +405,7 @@ class CatalogueServiceWebController(BaseController):
             doc = Session.query(HarvestObject
                                 ).filter(HarvestObject.guid==ident
                                     ).filter(HarvestObject.package!=None
-                                         ).order_by(HarvestObject.created.desc()
+                                         ).order_by(HarvestObject.gathered.desc()
                                                     ).limit(1).first()
             if doc is None:
                 continue
