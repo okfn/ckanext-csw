@@ -5,11 +5,11 @@ from datetime import datetime
 from pylons import request, response, config
 from lxml import etree
 from owslib.csw import namespaces
-from sqlalchemy import select,distinct
+from sqlalchemy import select,distinct,or_
 from ckan.lib.base import BaseController
 from ckan.model.meta import Session
 
-from ckanext.harvest.model import HarvestObject
+from ckanext.harvest.model import HarvestObject, HarvestJob,HarvestSource
 
 namespaces["xlink"] = "http://www.w3.org/1999/xlink"
 
@@ -30,7 +30,7 @@ class __rlog__(object):
         return getattr(log, attr)
     def dummy(self, *av, **kw):
         pass
-       
+
 def ntag(nselem):
     pfx, elem = nselem.split(":")
     return "{%s}%s" % (namespaces[pfx], elem)
@@ -39,7 +39,7 @@ class CatalogueServiceWebController(BaseController):
 
     def _operations(self):
         return dict((x, getattr(self, x)) for x in dir(self) if not x.startswith("_"))
-    
+
     def dispatch_get(self):
         self.rlog = __rlog__()
         self.rlog.info("request environ\n%s", request.environ)
@@ -96,7 +96,7 @@ class CatalogueServiceWebController(BaseController):
             self.rlog.error("exception parsing body\n%s", traceback.format_exc())
             err = self._exception(exceptionCode="MissingParameterValue", locator="request")
             return self._render_xml(err)
-        
+
         root = req.getroot()
         _unused, op = root.tag.rsplit("}", 1)
         if op not in ops:
@@ -107,7 +107,7 @@ class CatalogueServiceWebController(BaseController):
         if not isinstance(req, dict):
             return req
         return ops[op](req)
-    
+
     def _render_xml(self, root):
         tree = etree.ElementTree(root)
         data = etree.tostring(tree, pretty_print=True)
@@ -179,11 +179,11 @@ class CatalogueServiceWebController(BaseController):
             return self._render_xml(err)
 
         params["id"] = [x.text for x in root.findall(ntag("csw:Id"))]
-        
+
         query = root.find(ntag("csw:Query"))
         if query is not None:
             params.update(self._parse_query(query))
-            
+
         if params["elementSetName"] not in ("full", "brief", "summary"):
             err = self._exception(exceptionCode="InvalidParameterValue", locator="elementSetName",
                                  text=params["elementSetName"])
@@ -200,7 +200,7 @@ class CatalogueServiceWebController(BaseController):
         return params
 
     def GetCapabilities(self, req):
-        site = request.host_url + request.path        
+        site = request.host_url + request.path
         caps = etree.Element(ntag("csw:Capabilities"), nsmap=namespaces)
         srvid = etree.SubElement(caps, ntag("ows:ServiceIdentification"))
         title = etree.SubElement(srvid, ntag("ows:Title"))
@@ -329,7 +329,7 @@ class CatalogueServiceWebController(BaseController):
 #        param = etree.SubElement(op, ntag("ows:Parameter"), name="outputSchema")
 #        val = etree.SubElement(param, ntag("ows:Value"))
 #        val.text = "http://www.isotc211.org/2005/gmd"
-        
+
         filcap = etree.SubElement(caps, ntag("ogc:Filter_Capabilities"))
         spacap = etree.SubElement(filcap, ntag("ogc:Spatial_Capabilities"))
         geomop = etree.SubElement(spacap, ntag("ogc:GeometryOperands"))
@@ -342,34 +342,37 @@ class CatalogueServiceWebController(BaseController):
         idcap = etree.SubElement(filcap, ntag("ogc:Id_Capabilities"))
         eid = etree.SubElement(idcap, ntag("ogc:EID"))
         fid = etree.SubElement(idcap, ntag("ogc:FID"))
-        
+
         return self._render_xml(caps)
-    
+
     def GetRecords(self, req):
         resp = etree.Element(ntag("csw:GetRecordsResponse"), nsmap=namespaces)
         etree.SubElement(resp, ntag("csw:SearchStatus"), timestamp=datetime.utcnow().isoformat())
 
         cursor = Session.connection()
-        
 
-        q = select(columns=[HarvestObject.guid],distinct=True).where(HarvestObject.package!=None)
-        '''
-        q  = select([HarvestedDocument.guid]
-                    ).order_by(HarvestedDocument.created.desc()
-                                       )
-        '''
+
+        #q = select(columns=[HarvestObject.guid],distinct=True).where(HarvestObject.package!=None)
+        q = Session.query(distinct(HarvestObject.guid)) \
+            .join(HarvestJob) \
+            .join(HarvestSource) \
+            .filter(HarvestObject.package!=None) \
+            .filter(or_(HarvestSource.type=='gemini-single', \
+                        HarvestSource.type=='gemini-waf', \
+                        HarvestSource.type=='csw'))
+
         ### TODO Parse query instead of stupidly just returning whatever we like
         startPosition = req["startPosition"] if req["startPosition"] > 0 else 1
         maxRecords = req["maxRecords"] if req["maxRecords"] > 0 else 10
         rset = q.offset(startPosition-1).limit(maxRecords)
 
-        total = Session.execute(q.alias().count()).first()[0]
+        total = q.count()
         attrs = {
             "numberOfRecordsMatched": total,
             "elementSet": req["elementSetName"], # we lie here. it's always really "full"
             }
         if req["resultType"] == "results":
-            returned = Session.execute(rset.alias().count()).first()[0]
+            returned = rset.count()
             attrs["numberOfRecordsReturned"] = returned
             if (total-startPosition-1) > returned:
                 attrs["nextRecord"] = startPosition + returned
@@ -388,15 +391,15 @@ class CatalogueServiceWebController(BaseController):
                                         ).filter(HarvestObject.package!=None
                                              ).order_by(HarvestObject.gathered.desc()
                                                         ).limit(1).first()
-                #TODO: Use proper checking with source type
-                if 'MD_Metadata' in doc.content:
-                    try:
-                        record = etree.parse(StringIO(doc.content.encode("utf-8")))
-                        results.append(record.getroot())
-                    except:
-                        log.error("exception parsing document %s:\n%s", doc.id, traceback.format_exc())
-                        raise
-            
+
+                try:
+
+                    record = etree.parse(StringIO(doc.content.encode("utf-8")))
+                    results.append(record.getroot())
+                except:
+                    log.error("exception parsing document %s:\n%s", doc.id, traceback.format_exc())
+                    raise
+
         return self._render_xml(resp)
 
     def GetRecordById(self, req):
@@ -411,8 +414,7 @@ class CatalogueServiceWebController(BaseController):
             if doc is None:
                 continue
 
-            #TODO: Use proper checking with source type
-            if 'MD_Metadata' in doc.content:    
+            if 'MD_Metadata' in doc.content:
                 try:
                     record = etree.parse(StringIO(doc.content.encode("utf-8")))
                     resp.append(record.getroot())
@@ -435,4 +437,4 @@ class CatalogueServiceWebController(BaseController):
 ###         </ns0:Constraint>
 ###     </ns0:Query>
 ### </ns0:GetRecords>
-      
+
