@@ -121,6 +121,9 @@ class CswService(OwsService):
             record["xml"] = etree.tostring(mdtree, pretty_print=True, xml_declaration=True)
         except TypeError:
             # API incompatibilities between different flavours of elementtree
-            record["xml"] = etree.tostring(mdtree)
+            try:
+                record["xml"] = etree.tostring(mdtree)
+            except AssertionError:
+                record["xml"] = etree.tostring(md)
         record["tree"] = mdtree
         return record
