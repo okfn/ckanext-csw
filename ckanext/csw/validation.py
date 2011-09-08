@@ -66,17 +66,16 @@ class Validator(object):
             for schematron in self.schematrons[name]:
                 result = schematron(xml)
                 errors = []
-                #for element in result.findall("svrl:failed-assert", namespaces = __ns__):
                 for element in result.findall("{http://purl.oclc.org/dsdl/svrl}failed-assert"):
                     errors.append(element)
                 if len(errors) > 0:
                     messages = []
                     for error in errors:
-                        #errtext = element.find("svrl:text", namespaces = __ns__)
-                        errtext = element.find("{http://purl.oclc.org/dsdl/svrl}text")
-                        messages.append(errtext.text.strip())
-                        
-                    messages = ["Validating againts %s profile failed" % name] + \
+                        errtext = error.find("{http://purl.oclc.org/dsdl/svrl}text")
+                        message = errtext.text.strip()
+                        if not message in messages:
+                            messages.append(message)
+                    messages = ["Validating against %s profile failed" % name] + \
                         list(set(messages))
                     return False, messages
         return True, []
