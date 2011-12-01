@@ -31,7 +31,7 @@ def isoconstraints_schematron():
 
 def gemini2_schematron():
     with resource_stream("ckanext.csw",
-                         "xml/gemini2/gemini2-schematron-20110906-v1.2.sch") as schema:
+                         "xml/gemini2/gemini2-schematron-20101014-v1.0.sch") as schema:
         return schematron(schema)
 
 def iso19139_schematrons():
