@@ -7,6 +7,7 @@ from lxml import etree
 from owslib.csw import namespaces
 from sqlalchemy import select,distinct,or_
 from ckan.lib.base import BaseController
+from ckan.model import Package
 from ckan.model.meta import Session
 
 from ckanext.harvest.model import HarvestObject, HarvestJob,HarvestSource
@@ -354,10 +355,12 @@ class CatalogueServiceWebController(BaseController):
 
         #q = select(columns=[HarvestObject.guid],distinct=True).where(HarvestObject.package!=None)
         q = Session.query(distinct(HarvestObject.guid)) \
-            .join(HarvestJob) \
-            .join(HarvestSource) \
-            .filter(HarvestObject.package!=None) \
-            .filter(or_(HarvestSource.type=='gemini-single', \
+                .join(Package) \
+                .join(HarvestJob).join(HarvestSource) \
+                .filter(HarvestSource.active==True) \
+                .filter(HarvestObject.package!=None) \
+                .filter(Package.state==u'active') \
+                .filter(or_(HarvestSource.type=='gemini-single', \
                         HarvestSource.type=='gemini-waf', \
                         HarvestSource.type=='csw'))
 
@@ -386,12 +389,15 @@ class CatalogueServiceWebController(BaseController):
 
         if req["resultType"] == "results":
             for guid, in Session.execute(rset):
-                doc = Session.query(HarvestObject
-                                    ).filter(HarvestObject.guid==guid
-                                        ).filter(HarvestObject.package!=None
-                                             ).order_by(HarvestObject.gathered.desc()
-                                                        ).limit(1).first()
-
+                doc = Session.query(HarvestObject) \
+                        .join(Package) \
+                        .join(HarvestJob).join(HarvestSource) \
+                        .filter(HarvestSource.active==True) \
+                        .filter(HarvestObject.guid==guid) \
+                        .filter(HarvestObject.package!=None) \
+                        .filter(Package.state==u'active') \
+                        .order_by(HarvestObject.gathered.desc()) \
+                        .limit(1).first()
                 try:
 
                     record = etree.parse(StringIO(doc.content.encode("utf-8")))
@@ -406,11 +412,16 @@ class CatalogueServiceWebController(BaseController):
         resp = etree.Element(ntag("csw:GetRecordByIdResponse"), nsmap=namespaces)
         seen = set()
         for ident in req["id"]:
-            doc = Session.query(HarvestObject
-                                ).filter(HarvestObject.guid==ident
-                                    ).filter(HarvestObject.package!=None
-                                         ).order_by(HarvestObject.gathered.desc()
-                                                    ).limit(1).first()
+            doc = Session.query(HarvestObject) \
+                    .join(Package) \
+                    .join(HarvestJob).join(HarvestSource) \
+                    .filter(HarvestSource.active==True) \
+                    .filter(HarvestObject.guid==ident) \
+                    .filter(HarvestObject.package!=None) \
+                    .filter(Package.state==u'active') \
+                    .order_by(HarvestObject.gathered.desc()) \
+                    .limit(1).first()
+
             if doc is None:
                 continue
 
