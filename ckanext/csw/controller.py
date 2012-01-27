@@ -357,7 +357,6 @@ class CatalogueServiceWebController(BaseController):
         q = Session.query(distinct(HarvestObject.guid)) \
                 .join(Package) \
                 .join(HarvestJob).join(HarvestSource) \
-                .filter(HarvestSource.active==True) \
                 .filter(HarvestObject.package!=None) \
                 .filter(Package.state==u'active') \
                 .filter(or_(HarvestSource.type=='gemini-single', \
@@ -391,8 +390,6 @@ class CatalogueServiceWebController(BaseController):
             for guid, in Session.execute(rset):
                 doc = Session.query(HarvestObject) \
                         .join(Package) \
-                        .join(HarvestJob).join(HarvestSource) \
-                        .filter(HarvestSource.active==True) \
                         .filter(HarvestObject.guid==guid) \
                         .filter(HarvestObject.package!=None) \
                         .filter(Package.state==u'active') \
