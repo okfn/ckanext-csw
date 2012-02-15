@@ -352,12 +352,10 @@ class CatalogueServiceWebController(BaseController):
 
         cursor = Session.connection()
 
-
-        #q = select(columns=[HarvestObject.guid],distinct=True).where(HarvestObject.package!=None)
         q = Session.query(distinct(HarvestObject.guid)) \
                 .join(Package) \
-                .join(HarvestJob).join(HarvestSource) \
-                .filter(HarvestObject.package!=None) \
+                .join(HarvestSource) \
+                .filter(HarvestObject.current==True) \
                 .filter(Package.state==u'active') \
                 .filter(or_(HarvestSource.type=='gemini-single', \
                         HarvestSource.type=='gemini-waf', \
@@ -391,10 +389,9 @@ class CatalogueServiceWebController(BaseController):
                 doc = Session.query(HarvestObject) \
                         .join(Package) \
                         .filter(HarvestObject.guid==guid) \
-                        .filter(HarvestObject.package!=None) \
+                        .filter(HarvestObject.current==True) \
                         .filter(Package.state==u'active') \
-                        .order_by(HarvestObject.gathered.desc()) \
-                        .limit(1).first()
+                        .first()
                 try:
 
                     record = etree.parse(StringIO(doc.content.encode("utf-8")))
