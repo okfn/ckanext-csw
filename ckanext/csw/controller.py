@@ -37,8 +37,11 @@ def ntag(nselem):
     return "{%s}%s" % (namespaces[pfx], elem)
 
 class CatalogueServiceWebController(BaseController):
+    '''Basic CSW server'''
 
     def _operations(self):
+        '''Returns a list of this class\'s methods.
+        '''
         return dict((x, getattr(self, x)) for x in dir(self) if not x.startswith("_"))
 
     def dispatch_get(self):
