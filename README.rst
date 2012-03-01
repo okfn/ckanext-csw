@@ -1,4 +1,4 @@
------------
+===========
 ckanext-csw
 ===========
 
@@ -18,7 +18,7 @@ The currently supported methods with this CSW Server are:
 
 ckanext-csw provides the CSW service at ``/csw``. 
 
-For example you can ask the capabilities of the CSW server installed into CKAN running on 127.0.0.1:5000 like this:
+For example you can ask the capabilities of the CSW server installed into CKAN running on 127.0.0.1:5000 like this::
 
  curl 'http://127.0.0.1:5000/csw?request=GetCapabilities&service=CSW'
 
