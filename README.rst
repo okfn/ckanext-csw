@@ -2,9 +2,10 @@
 ckanext-csw
 ===========
 
-ckanext-csw is:
- * a basic CSW server - to server metadata from the CKAN instance
- * a command-line tool to help making requests of any CSW server
+ckanext-csw is made of several distinct parts:
+ * CSW Server - a basic CSW server - to server metadata from the CKAN instance
+ * cswinfo - a command-line tool to help making requests of any CSW server
+ * Validator - a python library that uses Schematron to validate geographic metadata XML
 
 CSW (Catalogue Service for the Web) is an OGC standard for a web interface that allows you to access metadata (which are records that describe data or services)
 
@@ -47,6 +48,23 @@ The equivalent example to the one above for asking the cabailities is::
 
 OWSLib is the library used to actually perform the queries.
 
+Validator
+=========
+
+This python library uses Schematron and other schemas to validate the XML.
+
+Here is a simple example of using the Validator library:
+
+ from ckanext.csw.validation import Validator
+ xml = etree.fromstring(gemini_string)
+ validator = Validator(profiles=('iso19139', 'gemini2', 'constraints'))
+ valid, messages = validator.isvalid(xml)
+ if not valid:
+     print "Validation error: " + messages[0] + ':\n' + '\n'.join(messages[1:])
+
+In DGU, the Validator is integrated here:
+https://github.com/okfn/ckanext-inspire/blob/master/ckanext/inspire/harvesters.py#L88
+
 
 Setup
 =====
@@ -61,7 +79,7 @@ Currently the library dependencies aren't setup to install automatically, so do 
 
   pip install owslib 'lxml<=2.2.99' argparse
 
-Enable the extension by adding ``cswserver`` to your ckan.plugins line in your CKAN config file (``harvest`` should be there already from the ckanext-harvest install)::
+To enable the CSW Server you should adding ``cswserver`` to your ckan.plugins line in your CKAN config file (``harvest`` should be there already from the ckanext-harvest install)::
 
   ckan.plugins = harvest cswserver
 
