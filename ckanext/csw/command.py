@@ -1,5 +1,8 @@
 import argparse
 from pprint import pprint
+import types
+import logging
+
 from ckanext.csw.services import CswService
 
 #remote = "http://www.nationaalgeoregister.nl/geonetwork/srv/eng/csw"
@@ -9,6 +12,9 @@ def cswinfo():
     """
     Hello World
     """
+    log_format = '%(asctime)-7s %(levelname)s %(message)s'
+    logging.basicConfig(format=log_format, level=logging.INFO)
+
     parser = argparse.ArgumentParser(description=cswinfo.__doc__)
 
     parser.add_argument("-d", "--debug", dest="debug", action="store_true")
@@ -33,5 +39,11 @@ def cswinfo():
     value = service(args)
     if isinstance(value, basestring):
         print value
+    elif isinstance(value, types.GeneratorType):
+        count = 0
+        for val in value:
+            print val
+            count += 1
+        print '%i results' % count
     elif value is not None:
         pprint(value)

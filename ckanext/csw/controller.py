@@ -7,14 +7,17 @@ from lxml import etree
 from owslib.csw import namespaces
 from sqlalchemy import select,distinct,or_
 from ckan.lib.base import BaseController
+from ckan.lib.helpers import truncate
 from ckan.model import Package
 from ckan.model.meta import Session
-
+from pylons import config
 from ckanext.harvest.model import HarvestObject, HarvestJob,HarvestSource
 
 namespaces["xlink"] = "http://www.w3.org/1999/xlink"
 
 log = __import__("logging").getLogger(__name__)
+
+LOG_XML_LENGTH = config.get('cswservice.log_xml_length', 1000)
 
 from random import random
 class __rlog__(object):
@@ -50,7 +53,7 @@ class CatalogueServiceWebController(BaseController):
         self.rlog.info("request headers\n%s", request.headers)
         ops = self._operations()
         req = dict(request.GET.items())
-
+        
         ## special cases
 	if "REQUEST" in req: req["request"] = req["REQUEST"]
         if "SERVICE" in req: req["service"] = req["SERVICE"]
@@ -347,7 +350,9 @@ class CatalogueServiceWebController(BaseController):
         eid = etree.SubElement(idcap, ntag("ogc:EID"))
         fid = etree.SubElement(idcap, ntag("ogc:FID"))
 
-        return self._render_xml(caps)
+        data = self._render_xml(caps)
+        log.info('GetCapabilities response: %r', truncate(data, LOG_XML_LENGTH))
+        return data
 
     def GetRecords(self, req):
         resp = etree.Element(ntag("csw:GetRecordsResponse"), nsmap=namespaces)
@@ -403,7 +408,9 @@ class CatalogueServiceWebController(BaseController):
                     log.error("exception parsing document %s:\n%s", doc.id, traceback.format_exc())
                     raise
 
-        return self._render_xml(resp)
+        data = self._render_xml(resp)
+        log.info('GetRecords response: %r', truncate(data, LOG_XML_LENGTH))
+        return data
 
     def GetRecordById(self, req):
         resp = etree.Element(ntag("csw:GetRecordByIdResponse"), nsmap=namespaces)
@@ -430,7 +437,9 @@ class CatalogueServiceWebController(BaseController):
                     log.error("exception parsing document %s:\n%s", doc.id, traceback.format_exc())
                     raise
 
-        return self._render_xml(resp)
+        data = self._render_xml(resp)
+        log.info('GetRecordById response: %r', truncate(data, LOG_XML_LENGTH))
+        return data
 
 ### <ns0:GetRecords xmlns:ns0="http://www.opengis.net/cat/csw/2.0.2" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" outputSchema="http://www.isotc211.org/2005/gmd" outputFormat="application/xml" version="2.0.2" resultType="results" service="CSW" startPosition="1" maxRecords="5" xsi:schemaLocation="http://www.opengis.net/cat/csw/2.0.2 http://schemas.opengis.net/csw/2.0.2/CSW-discovery.xsd">
 ###     <ns0:Query typeNames="csw:Record">

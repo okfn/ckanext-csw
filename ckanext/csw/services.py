@@ -3,7 +3,14 @@ Some very thin wrapper classes around those in OWSLib
 for convenience.
 """
 
+import logging
+
 from owslib.etree import etree
+
+log = logging.getLogger('ckanext.csw.services')
+
+class CswError(Exception):
+    pass
 
 class OwsService(object):
     def __init__(self, endpoint=None):
@@ -60,7 +67,8 @@ class CswService(OwsService):
     from owslib.csw import CatalogueServiceWeb as _Implementation
     def getrecords(self, qtype=None, keywords=[],
                    typenames="csw:Record", esn="brief",
-                   skip=0, count=10, **kw):
+                   skip=0, count=10, outputschema="gmd", **kw):
+        from owslib.csw import namespaces
         csw = self._ows(**kw)
         kwa = {
             "qtype": qtype,
@@ -69,12 +77,21 @@ class CswService(OwsService):
             "esn": esn,
             "startposition": skip,
             "maxrecords": count,
+            "outputschema": namespaces[outputschema],
             }
+        log.info('Making CSW request: getrecords %r', kwa)
         csw.getrecords(**kwa)
+        if csw.exceptionreport:
+            err = 'Error getting records: %r' % \
+                  csw.exceptionreport.exceptions
+            #log.error(err)
+            raise CswError(err)
         return [self._xmd(r) for r in csw.records.values()]
 
     def getidentifiers(self, qtype=None, typenames="csw:Record", esn="brief",
-                       keywords=[], limit=None, page=10, **kw):
+                       keywords=[], limit=None, page=10, outputschema="gmd",
+                       **kw):
+        from owslib.csw import namespaces
         csw = self._ows(**kw)
         kwa = {
             "qtype": qtype,
@@ -83,10 +100,17 @@ class CswService(OwsService):
             "esn": esn,
             "startposition": 0,
             "maxrecords": page,
+            "outputschema": namespaces[outputschema],
             }
         i = 0
         while True:
+            log.info('Making CSW request: getrecords %r', kwa)
             csw.getrecords(**kwa)
+            if csw.exceptionreport:
+                err = 'Error getting identifiers: %r' % \
+                      csw.exceptionreport.exceptions
+                #log.error(err)
+                raise CswError(err)
             identifiers = csw.records.keys()
             if limit is not None:
                 identifiers = identifiers[:(limit-startposition)]
@@ -107,7 +131,13 @@ class CswService(OwsService):
             "outputschema": namespaces[outputschema],
             }
         # Ordinary Python version's don't support the metadata argument
+        log.info('Making CSW request: getrecordbyid %r %r', ids, kwa)
         csw.getrecordbyid(ids, **kwa)
+        if csw.exceptionreport:
+            err = 'Error getting record by id: %r' % \
+                  csw.exceptionreport.exceptions
+            #log.error(err)
+            raise CswError(err)
         if not csw.records:
             return
         record = self._xmd(csw.records.values()[0])

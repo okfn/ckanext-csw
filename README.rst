@@ -104,5 +104,6 @@ Configure the extension itself with the following keys in your CKAN config file 
   cswservice.contact_instructions = 
   cswservice.contact_role = 
   cswservice.rndlog_threshold = 0.01
+  cswservice.log_xml_length = 1000
 
 cswservice.rndlog_threshold is the percentage of interactions to store in the log file.
