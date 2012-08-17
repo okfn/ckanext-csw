@@ -365,9 +365,13 @@ class CatalogueServiceWebController(BaseController):
                 .join(HarvestSource) \
                 .filter(HarvestObject.current==True) \
                 .filter(Package.state==u'active') \
-                .filter(or_(HarvestSource.type=='gemini-single', \
-                        HarvestSource.type=='gemini-waf', \
-                        HarvestSource.type=='csw'))
+                .filter(or_(HarvestSource.type=='gemini-single',
+                        HarvestSource.type=='gemini-waf',
+                        HarvestSource.type=='csw',
+                        HarvestSource.type=='iso-single',
+                        HarvestSource.type=='iso-waf',
+                        HarvestSource.type=='iso-csw'
+                        ))
 
         ### TODO Parse query instead of stupidly just returning whatever we like
         startPosition = req["startPosition"] if req["startPosition"] > 0 else 1
@@ -425,11 +429,10 @@ class CatalogueServiceWebController(BaseController):
                     .filter(Package.state==u'active') \
                     .order_by(HarvestObject.gathered.desc()) \
                     .limit(1).first()
-
             if doc is None:
                 continue
 
-            if 'MD_Metadata' in doc.content:
+            if 'MD_Metadata' in doc.content or 'MI_Metadata' in doc.content:
                 try:
                     record = etree.parse(StringIO(doc.content.encode("utf-8")))
                     resp.append(record.getroot())
