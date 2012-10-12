@@ -3,81 +3,146 @@ from pkg_resources import resource_stream, resource_filename
 from lxml import etree
 log = __import__("logging").getLogger(__name__)
 
-__ns__ = {
-    "svrl": "http://purl.oclc.org/dsdl/svrl",
-    }
+class BaseValidator(object):
+    '''Base class for a validator.'''
+    name = None
+    title = None
 
-def schematron(schema):
-    transforms = [
-        "xml/schematron/iso_dsdl_include.xsl",
-        "xml/schematron/iso_abstract_expand.xsl",
-        "xml/schematron/iso_svrl_for_xslt1.xsl",
-        ]
-    if isinstance(schema, file):
-        compiled = etree.parse(schema)
-    else:
-        compiled = schema
-    for filename in transforms:
-        with resource_stream("ckanext.csw", filename) as stream:
-            xform_xml = etree.parse(stream)
-            xform = etree.XSLT(xform_xml)
-            compiled = xform(compiled)
-    return etree.XSLT(compiled)
+    @classmethod
+    def is_valid(cls, xml):
+        '''
+        Runs the validation on the supplied XML etree.
+        Returns tuple:
+          (is_valid, error_message_list)
+        '''
+        raise NotImplementedError
 
-def isoconstraints_schematron():
-    with resource_stream("ckanext.csw",
-                         "xml/medin/ISOTS19139A1Constraints_v1.3.sch") as schema:
-        return schematron(schema)
+class SchematronValidator(BaseValidator):
+    '''Base class for a validator that uses Schematron.'''
+    has_init = False
 
-def gemini2_schematron():
-    with resource_stream("ckanext.csw",
-                         "xml/gemini2/gemini2-schematron-20110906-v1.2.sch") as schema:
-        return schematron(schema)
+    @classmethod
+    def get_schematron(cls):
+        raise NotImplementedError
 
-def iso19139_schematrons():
-    with resource_stream("ckanext.csw", "xml/schematron/ExtractSchFromXSD.xsl") as xsl_file:
-        xsl = etree.parse(xsl_file)
-        xsd2sch = etree.XSLT(xsl)
+    @classmethod
+    def is_valid(cls, xml):
+        if not hasattr(cls, 'schematrons'):
+            log.info('Compiling "%s"', cls.title)
+            cls.schematrons = cls.get_schematrons()
+        for schematron in cls.schematrons:
+            result = schematron(xml)
+            errors = []
+            for element in result.findall("{http://purl.oclc.org/dsdl/svrl}failed-assert"):
+                errors.append(element)
+            if len(errors) > 0:
+                messages = []
+                for error in errors:
+                    message = cls.extract_error_details(error)
+                    if not message in messages:
+                        messages.append(message)
+                messages = list(set(messages))
+                return False, messages
+        return True, []
 
-    root = resource_filename("ckanext.csw", "xml/iso19139")
-    for filename in ["gmd/gmd.xsd"]:
-        filename = os.path.join(root, filename)
-        with open(filename) as xsd_file:
-            xsd = etree.parse(xsd_file)
-            yield schematron(xsd2sch(xsd))
+    @classmethod
+    def extract_error_details(cls, failed_assert_element):
+        assert_ = failed_assert_element.get('test')
+        location = failed_assert_element.get('location')
+        message_element = failed_assert_element.find("{http://purl.oclc.org/dsdl/svrl}text")
+        message = message_element.text.strip()
+        failed_assert_element
+        return 'Error Message: "%s"  Error Location: "%s"  Error Assert: "%s"' % (message, location, assert_)
+
+    @classmethod
+    def schematron(cls, schema):
+        transforms = [
+            "xml/schematron/iso_dsdl_include.xsl",
+            "xml/schematron/iso_abstract_expand.xsl",
+            "xml/schematron/iso_svrl_for_xslt1.xsl",
+            ]
+        if isinstance(schema, file):
+            compiled = etree.parse(schema)
+        else:
+            compiled = schema
+        for filename in transforms:
+            with resource_stream("ckanext.csw", filename) as stream:
+                xform_xml = etree.parse(stream)
+                xform = etree.XSLT(xform_xml)
+                compiled = xform(compiled)
+        return etree.XSLT(compiled)
+
+        
+class ISO19139Schema(SchematronValidator):
+    name = 'iso19139'
+    title = 'ISO19139 XSD Schema'
+
+    @classmethod
+    def get_schematrons(cls):
+        with resource_stream("ckanext.csw", "xml/schematron/ExtractSchFromXSD.xsl") as xsl_file:
+            xsl = etree.parse(xsl_file)
+            xsd2sch = etree.XSLT(xsl)
+
+        root = resource_filename("ckanext.csw", "xml/iso19139")
+        schematrons = []
+        for filename in ["gmd/gmd.xsd"]:
+            filename = os.path.join(root, filename)
+            with open(filename) as xsd_file:
+                xsd = etree.parse(xsd_file)
+                schematrons.append(cls.schematron(xsd2sch(xsd)))
+        return schematrons
+
+class ConstraintsSchematron(SchematronValidator):
+    name = 'constraints'
+    title = 'ISO19139 Table A.1 Constraints Schematron 1.3'
+
+    @classmethod
+    def get_schematrons(cls):
+        with resource_stream("ckanext.csw",
+                             "xml/medin/ISOTS19139A1Constraints_v1.3.sch") as schema:
+            return [cls.schematron(schema)]
+
+
+class Gemini2Schematron(SchematronValidator):
+    name = 'gemini2'
+    title = 'GEMINI2 Schematron 1.2'
+
+    @classmethod
+    def get_schematrons(cls):
+        with resource_stream("ckanext.csw",
+                             "xml/gemini2/gemini2-schematron-20110906-v1.2.sch") as schema:
+            return [cls.schematron(schema)]
+
+all_validators = (ISO19139Schema,
+                  ConstraintsSchematron,
+                  Gemini2Schematron)
+
 
 class Validator(object):
+    '''
+    Validates XML against one or more profiles (i.e. validators).
+    '''
     def __init__(self, profiles=["iso19139", "constraints", "gemini2"]):
-        log.info("Initialising...")
         self.profiles = profiles
-        self.schematrons = {}
-        if "iso19139" in profiles:
-            log.info("Compiling iso19139 schematron")
-            self.schematrons["iso19139"] = list(iso19139_schematrons())
-        if "constraints" in profiles:
-            log.info("Compiling iso19139 constraints schematron")
-            self.schematrons["constraints"] = [isoconstraints_schematron()]
-        if "gemini2" in profiles:
-            log.info("Compiling GEMINI 2 schematron")
-            self.schematrons["gemini2"] = [gemini2_schematron()]
 
     def isvalid(self, xml):
+        '''For backward compatibility'''
+        return is_valid(xml)
+    
+    def is_valid(self, xml):
+        if not hasattr(self, 'validators'):
+            self.validators = {} # name: class
+            for validator_class in all_validators:
+                self.validators[validator_class.name] = validator_class
         for name in self.profiles:
-            for schematron in self.schematrons[name]:
-                result = schematron(xml)
-                errors = []
-                for element in result.findall("{http://purl.oclc.org/dsdl/svrl}failed-assert"):
-                    errors.append(element)
-                if len(errors) > 0:
-                    messages = []
-                    for error in errors:
-                        errtext = error.find("{http://purl.oclc.org/dsdl/svrl}text")
-                        message = errtext.text.strip()
-                        if not message in messages:
-                            messages.append(message)
-                    messages = ["Validating against %s profile failed" % name] + \
-                        list(set(messages))
-                    return False, messages
+            validator = self.validators[name]
+            is_valid, error_message_list = validator.is_valid(xml)
+            if not is_valid:
+                error_message_list.insert(0, 'Validating against "%s" profile failed' % validator.title)
+                log.info('%r', error_message_list)
+                return False, error_message_list
+            log.info('Validated against "%s"', validator.title)
+        log.info('Validation passed')
         return True, []
                 
 if __name__ == '__main__':
@@ -85,5 +150,5 @@ if __name__ == '__main__':
     import logging
     logging.basicConfig()
     
-    v = Validator()
-    v.isvalid(etree.parse(open(argv[1])))
+    v = Validators()
+    v.is_valid(etree.parse(open(argv[1])))
