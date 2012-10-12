@@ -4,6 +4,7 @@ ckanext-csw
 
 ckanext-csw is made of several distinct parts:
  * CSW Server - a basic CSW server - to server metadata from the CKAN instance
+ * CSW Client - a basic client for accessing a CSW server
  * cswinfo - a command-line tool to help making requests of any CSW server
  * Validator - a python library that uses Schematron to validate geographic metadata XML
 
@@ -24,6 +25,11 @@ For example you can ask the capabilities of the CSW server installed into CKAN r
  curl 'http://127.0.0.1:5000/csw?request=GetCapabilities&service=CSW'
 
 The standard CSW response is in XML format.
+
+CSW Client
+==========
+
+CswService is a client for python software (such as the CSW Harvester in ckanext-inspire) to conveniently access a CSW server, using the same three methods as the CSW Server supports. It is a wrapper around OWSLib's tool, dealing with the details of the calls and responses to make it very convenient to use, whereas OWSLib on its own is more complicated.
 
 cswinfo tool
 ============
