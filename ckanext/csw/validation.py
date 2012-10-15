@@ -36,23 +36,31 @@ class SchematronValidator(BaseValidator):
             for element in result.findall("{http://purl.oclc.org/dsdl/svrl}failed-assert"):
                 errors.append(element)
             if len(errors) > 0:
-                messages = []
+                messages_already_reported = set()
+                error_details = []
                 for error in errors:
-                    message = cls.extract_error_details(error)
-                    if not message in messages:
-                        messages.append(message)
-                messages = list(set(messages))
-                return False, messages
+                    message, details = cls.extract_error_details(error)
+                    if not message in messages_already_reported:
+                        error_details.append(details)
+                        messages_already_reported.add(message)
+                return False, error_details
         return True, []
 
     @classmethod
     def extract_error_details(cls, failed_assert_element):
+        '''Given the XML Element describing a schematron test failure,
+        this method extracts the strings describing the failure and returns
+        them.
+
+        Returns:
+           (error_message, fuller_error_details)
+        '''
         assert_ = failed_assert_element.get('test')
         location = failed_assert_element.get('location')
         message_element = failed_assert_element.find("{http://purl.oclc.org/dsdl/svrl}text")
         message = message_element.text.strip()
         failed_assert_element
-        return 'Error Message: "%s"  Error Location: "%s"  Error Assert: "%s"' % (message, location, assert_)
+        return message, 'Error Message: "%s"  Error Location: "%s"  Error Assert: "%s"' % (message, location, assert_)
 
     @classmethod
     def schematron(cls, schema):
