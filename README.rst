@@ -71,6 +71,7 @@ Here is a simple example of using the Validator library:
 In DGU, the Validator is integrated here:
 https://github.com/okfn/ckanext-inspire/blob/master/ckanext/inspire/harvesters.py#L88
 
+NOTE: The ISO19139 XSD Validator requires system library ``libxml2`` v2.9 (released Sept 2012). If you intend to use this validator then see the section below about installing libxml2.
 
 Setup
 =====
@@ -113,3 +114,39 @@ Configure the extension itself with the following keys in your CKAN config file 
   cswservice.log_xml_length = 1000
 
 cswservice.rndlog_threshold is the percentage of interactions to store in the log file.
+
+Installing libxml2
+==================
+
+Version 2.9 is required for the ISO19139 XSD validation.
+
+With CKAN you would probably have installed an older version from your distribution. (e.g. with ``sudo apt-get install libxml2-dev``). You need to find the SO files for the old version::
+
+  $ find /usr -name "libxml2.so"
+
+For example, it may show it here: ``/usr/lib/x86_64-linux-gnu/libxml2.so``. The directory of the SO file is used as a parameter to the ``configure`` next on.
+
+Download the libxml2 source::
+
+  $ cd ~
+  $ wget ftp://xmlsoft.org/libxml2/libxml2-2.9.0.tar.gz
+
+Unzip it::
+
+  $ tar zxvf libxml2-2.9.0.tar.gz
+  $ cd libxml2-2.9.0/
+
+Configure with the SO directory you found before::
+
+  $ ./configure --libdir=/usr/lib/x86_64-linux-gnu
+
+Now make it and install it::
+
+  $ make
+  $ sudo make install
+
+Now check the install by running xmllint::
+
+  $ xmllint --version
+  xmllint: using libxml version 20900
+     compiled with: Threads Tree Output Push Reader Patterns Writer SAXv1 FTP HTTP DTDValid HTML Legacy C14N Catalog XPath XPointer XInclude Iconv ISO8859X Unicode Regexps Automata Expr Schemas Schematron Modules Debug Zlib 
