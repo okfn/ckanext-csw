@@ -218,7 +218,7 @@ class Validator(object):
 
     def isvalid(self, xml):
         '''For backward compatibility'''
-        return is_valid(xml)
+        return self.is_valid(xml)
     
     def is_valid(self, xml):
         if not hasattr(self, 'validators'):
