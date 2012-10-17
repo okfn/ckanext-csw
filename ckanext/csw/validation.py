@@ -54,7 +54,7 @@ class XsdValidator(BaseValidator):
 
 
 class ISO19139EdenSchema(XsdValidator):
-    name = 'iso19139eden1'
+    name = 'iso19139eden'
     title = 'ISO19139 XSD Schema (EDEN)'
 
     @classmethod
